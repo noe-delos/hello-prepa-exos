@@ -1,9 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // src/app/api/generate/pdf/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export async function POST(request: NextRequest) {
@@ -28,7 +27,7 @@ export async function POST(request: NextRequest) {
     // Create a Buffer to store the PDF
     const chunks: Buffer[] = [];
 
-    doc.on("data", (chunk) => {
+    doc.on("data", (chunk: any) => {
       chunks.push(Buffer.from(chunk));
     });
 
@@ -44,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     // Exercises
     if (Array.isArray(content.exercises)) {
-      content.exercises.forEach((exercise, index) => {
+      content.exercises.forEach((exercise: any, index: number) => {
         doc.fontSize(14).text(`Exercise ${index + 1}`, { underline: true });
         doc.moveDown(0.5);
 
@@ -54,7 +53,7 @@ export async function POST(request: NextRequest) {
 
         // Options if they exist
         if (Array.isArray(exercise.options)) {
-          exercise.options.forEach((option, optIndex) => {
+          exercise.options.forEach((option: any, optIndex: number) => {
             doc
               .fontSize(10)
               .text(`${String.fromCharCode(65 + optIndex)}. ${option}`);

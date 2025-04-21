@@ -2,9 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { z } from "zod";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 // Initialize OpenAI
@@ -108,7 +105,10 @@ export async function POST(request: NextRequest) {
       const generatedContent = JSON.parse(
         completion.choices[0].message.content || "{}"
       );
-      console.log("API: Parsed generated content successfully");
+      console.log(
+        "API: Parsed generated content successfully",
+        generatedContent
+      );
     } catch (parseError) {
       console.error("API: Error parsing OpenAI response:", parseError);
       console.log(

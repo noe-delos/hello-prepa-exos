@@ -1,170 +1,237 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable react/no-unescaped-entities */
+
 "use client";
 
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { createClient } from "@/utils/supabase/client";
+import { User } from "@/types";
 import { Icon } from "@iconify/react";
-import { Generation } from "@/types";
-import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSidebarStore } from "@/store/sidebar-store";
-import { getGenerations } from "./actions";
+import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { useFileViewer } from "@/context/file-viewer-context";
+import { toast } from "sonner";
 
-export function GenerationHistory({ user }: { user: any }) {
+// Define a Generation type
+interface Generation {
+  id: string;
+  sous_test: string;
+  niveau: string;
+  part_exercice: string;
+  document_type: string;
+  question_count: number;
+  output_format: string;
+  file_path: string;
+  created_at: string;
+}
+
+interface GenerationHistoryProps {
+  user: User | null;
+}
+
+export function GenerationHistory({ user }: GenerationHistoryProps) {
+  const router = useRouter();
   const { isCollapsed } = useSidebarStore();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [userLoaded, setUserLoaded] = useState(false);
-  // Only proceed if we have a user
-  const userId = user?.id;
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const { openFile } = useFileViewer();
 
-  useEffect(() => {
-    if (user?.id) {
-      setUserLoaded(true);
-    }
-  }, [user]);
-
-  const { data, isLoading, error } = useQuery({
+  // Fetch generations using React Query
+  const {
+    data: generations,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["generations"],
-    queryFn: () => getGenerations(user?.id),
-    enabled: userLoaded, // Only run the query if userId exists and is truthy
-    staleTime: Infinity,
+    queryFn: async () => {
+      if (!user) return [];
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("generations")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      return data as Generation[];
+    },
+    enabled: !!user,
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-4">
-        <Icon
-          icon="line-md:loading-twotone-loop"
-          className="text-amber-500"
-          width={24}
-        />
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return isCollapsed ? null : (
-      <div className="px-3 py-2 text-sm text-foreground/70">
-        Erreur de chargement:{" "}
-        {error instanceof Error ? error.message : "Erreur inconnue"}
-      </div>
-    );
-  }
-
-  const generations: Generation[] = data.generations || [];
-
-  // If no generations or no user, show empty state
-  if (!userId || generations.length === 0) {
-    return isCollapsed ? null : (
-      <div className="px-3 py-2 text-sm text-foreground/70">
-        Aucune génération
-      </div>
-    );
-  }
-
-  // Only show first 5 generations by default when sidebar is expanded
-  const displayedGenerations = isExpanded
-    ? generations
-    : generations.slice(0, 5);
-
-  // Format the generation item text
-  const formatGenerationText = (generation: Generation) => {
-    const sousTest =
-      {
-        condMinimales: "Cond. Min.",
-        comprehension: "Compréhension",
-        calcul: "Calcul",
-        raisonnement: "Raisonnement",
-      }[generation.sous_test] || generation.sous_test;
-
-    const niveau =
-      {
-        facile: "Facile",
-        moyen: "Moyen",
-        difficile: "Difficile",
-      }[generation.niveau] || generation.niveau;
-
-    return `${sousTest} - ${niveau} (${generation.question_count})`;
-  };
-
-  // Format document type icon
-  const getDocumentIcon = (format: string) => {
-    switch (format) {
-      case "pdf":
-        return "mdi:file-pdf-box";
-      case "docx":
-        return "mdi:file-word-box";
-      default:
+  // Helper function to get icon by document type
+  const getDocumentIcon = (docType: string) => {
+    switch (docType) {
+      case "polycopie":
         return "mdi:file-document-outline";
+      case "fiche":
+        return "mdi:file-outline";
+      case "examen":
+        return "mdi:file-certificate-outline";
+      default:
+        return "mdi:file-outline";
     }
   };
 
-  if (isCollapsed) {
-    return (
-      <div className="px-2 py-2">
-        <TooltipProvider delayDuration={300}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center justify-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
-                <Icon
-                  icon="mdi:history"
-                  className="size-5 text-foreground/50"
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="right">Historique</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-    );
-  }
+  // Helper function to get test name in French
+  const getTestName = (sousTest: string) => {
+    switch (sousTest) {
+      case "condMinimales":
+        return "Cond. Minimales";
+      case "comprehension":
+        return "Compréhension";
+      case "calcul":
+        return "Calcul";
+      case "raisonnement":
+        return "Raisonnement";
+      default:
+        return sousTest;
+    }
+  };
+
+  // Handler for opening a file
+  const handleOpenFile = async (filePath: string, id: string) => {
+    try {
+      toast.info("Chargement du document...");
+
+      const supabase = createClient();
+
+      // Get file info for display
+      const { data: generation } = await supabase
+        .from("generations")
+        .select("document_type, sous_test, output_format")
+        .eq("id", id)
+        .single();
+
+      if (!generation) {
+        toast.error("Génération non trouvée");
+        return;
+      }
+
+      // Create a file name for display
+      const fileName = `${getTestName(generation.sous_test)} - ${
+        generation.document_type
+      }.${generation.output_format}`;
+
+      // Check if we're on the accueil page
+      const currentPath = window.location.pathname;
+
+      if (currentPath !== "/accueil") {
+        // If not on accueil, navigate there first
+        // Store the file details in sessionStorage
+        sessionStorage.setItem(
+          "pendingFile",
+          JSON.stringify({
+            url: filePath,
+            type: generation.output_format,
+            name: fileName,
+          })
+        );
+
+        router.push("/accueil");
+      } else {
+        // If we're already on accueil, open the file directly
+        openFile(filePath, generation.output_format, fileName);
+        toast.success("Document chargé");
+      }
+    } catch (error) {
+      console.error("Error opening file:", error);
+      toast.error("Erreur lors de l'ouverture du fichier");
+    }
+  };
+
+  if (!user) return null;
 
   return (
-    <div className="py-2">
-      <div className="px-3 py-2 text-sm font-medium flex items-center justify-between">
-        <span>Historique</span>
-        {generations.length > 5 && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs text-foreground/70 hover:text-foreground"
-          >
-            {isExpanded ? "Voir moins" : "Voir plus"}
-          </button>
-        )}
-      </div>
+    <div className="space-y-2">
+      {/* History title */}
+      {!isCollapsed && (
+        <h3 className="text-sm font-medium text-foreground/60 mb-2">
+          Historique
+        </h3>
+      )}
 
-      <div className="space-y-1 mt-1">
-        {displayedGenerations.map((generation) => (
-          <a
-            key={generation.id}
-            href={generation.file_path}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center px-3 py-2 text-sm rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <Icon
-              icon={getDocumentIcon(generation.output_format)}
-              className="mr-2 size-4 text-foreground/70"
-            />
-            <div className="flex-1 truncate">
-              <div className="font-medium truncate">
-                {formatGenerationText(generation)}
-              </div>
-              <div className="text-xs text-foreground/70">
-                {format(new Date(generation.created_at), "dd MMM yyyy, HH:mm", {
-                  locale: fr,
-                })}
+      {/* Loading state */}
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2 p-2">
+              <Skeleton className="h-8 w-8 rounded-md" />
+              <div className="space-y-1 flex-1">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-3 w-2/3" />
               </div>
             </div>
-          </a>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && !isCollapsed && (
+        <div className="text-sm text-red-500">
+          Erreur lors du chargement de l'historique
+        </div>
+      )}
+
+      {/* Empty state */}
+      {generations?.length === 0 && !isLoading && !isCollapsed && (
+        <div className="text-sm text-foreground/60 italic">
+          Aucune génération récente
+        </div>
+      )}
+
+      {/* List of generations */}
+      {generations && generations.length > 0 && (
+        <ScrollArea className={cn("h-60", isCollapsed && "h-72")}>
+          <div className="space-y-1 pr-2">
+            {generations.map((gen) => (
+              <Button
+                key={gen.id}
+                variant="ghost"
+                className={cn(
+                  "w-full justify-start p-2 h-auto",
+                  isCollapsed ? "flex-col" : "flex"
+                )}
+                onMouseEnter={() => setHoveredId(gen.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                onClick={() => handleOpenFile(gen.file_path, gen.id)}
+              >
+                <div
+                  className={cn(
+                    "flex items-center",
+                    isCollapsed && "flex-col gap-1"
+                  )}
+                >
+                  <Icon
+                    icon={getDocumentIcon(gen.document_type)}
+                    className={cn(
+                      "text-foreground/60",
+                      isCollapsed ? "h-6 w-6" : "h-5 w-5 mr-3"
+                    )}
+                  />
+                  {!isCollapsed && (
+                    <div className="flex flex-col items-start">
+                      <span className="text-sm font-medium truncate w-32">
+                        {getTestName(gen.sous_test)}
+                      </span>
+                      <span className="text-xs text-foreground/60">
+                        {format(new Date(gen.created_at), "dd MMM yyyy", {
+                          locale: fr,
+                        })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Button>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
     </div>
   );
 }

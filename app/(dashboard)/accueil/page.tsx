@@ -1,24 +1,32 @@
-import QuestionGenerator from "@/components/layout/home";
 import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+import { PendingFileChecker } from "@/components/pending-file-checker";
+import QuestionGenerator from "@/components/layout/home";
 
-export async function HomePage() {
+export default async function AccueilPage() {
   const supabase = await createClient();
 
-  // Get authenticated user
+  // Get user session
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();
+
+  // Redirect to login if not authenticated
+  if (!authUser) {
+    redirect("/login");
+  }
 
   // Get user profile from the database
   const { data: userProfile } = await supabase
     .from("users")
     .select("*")
-    .eq("id", authUser?.id)
+    .eq("id", authUser.id)
     .single();
 
-  const user = userProfile;
-
-  return <QuestionGenerator user={user} />;
+  return (
+    <>
+      <PendingFileChecker />
+      <QuestionGenerator user={userProfile} />
+    </>
+  );
 }
-
-export default HomePage;
