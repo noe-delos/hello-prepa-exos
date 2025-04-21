@@ -1,16 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import localFont from "next/font/local";
 import { Toaster } from "sonner";
 import { ReactQueryProvider } from "@/utils/providers";
-
-export const musticaFont = localFont({
-  src: "../public/fonts/MusticaPro-SemiBold.otf", // Assuming you have this
-  variable: "--font-mustica",
-  display: "swap",
-});
-
-export const mustica = musticaFont.style.fontFamily;
+import { musticaFont } from "@/utils/style";
 
 export const metadata: Metadata = {
   title: "Outil admin",
