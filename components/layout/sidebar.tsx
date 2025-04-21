@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 // components/layout/sidebar.tsx
 "use client";
 

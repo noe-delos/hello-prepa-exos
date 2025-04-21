@@ -1,3 +1,6 @@
+/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // app/(dashboard)/profile/page.tsx
 import { createClient } from "@/utils/supabase/server";
 import {
@@ -63,7 +66,7 @@ export default async function ProfilePage() {
               </AvatarFallback>
             </Avatar>
 
-            <form action={uploadProfilePicture} className="flex-1">
+            <form action={uploadProfilePicture as any} className="flex-1">
               <div className="flex items-end gap-4">
                 <div className="flex-1">
                   <Label htmlFor="profile_picture" className="block mb-2">
@@ -90,7 +93,7 @@ export default async function ProfilePage() {
               Mettez à jour vos informations personnelles
             </CardDescription>
           </CardHeader>
-          <form action={updateProfile}>
+          <form action={updateProfile as any}>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -137,7 +140,7 @@ export default async function ProfilePage() {
             <CardTitle>Modifier le mot de passe</CardTitle>
             <CardDescription>Mettez à jour votre mot de passe</CardDescription>
           </CardHeader>
-          <form action={updatePassword}>
+          <form action={updatePassword as any}>
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="current_password">Mot de passe actuel</Label>

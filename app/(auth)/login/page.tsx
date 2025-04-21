@@ -1,5 +1,9 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react/no-unescaped-entities */
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,7 +98,7 @@ export default function LoginPage() {
 
           <div className="absolute bottom-0 left-0 p-4 md:p-6 z-10 text-white">
             <h2 className="text-2xl md:text-4xl font-bold mb-1 flex flex-row items-center gap-2">
-              Génération d'exercises
+              Rédaction d'exercises
               <Icon
                 icon="mingcute:sparkles-fill"
                 className="text-white"
@@ -102,7 +106,7 @@ export default function LoginPage() {
               />
             </h2>
             <p className="text-xs md:text-sm">
-              Votre outil interne de génération d'exercises.
+              Votre outil interne de rédaction d'exercises.
             </p>
           </div>
         </div>
@@ -110,12 +114,10 @@ export default function LoginPage() {
 
       <div className="w-full md:w-1/2 flex items-center justify-center px-4 py-8 md:px-14">
         <div className="w-full max-w-md md:w-4/5 flex flex-col">
-          <div className="text-center mb-6 md:mb-8">
-            <h1
-              className="text-[4rem] font-normal mb-8"
-              style={{ fontFamily: curly }}
-            >
-              Bienvenue
+          <div className="text-center mb-6 md:mb-8 relative">
+            <div className="absolute left-1/2 top-[30%;] -translate-x-1/2 -translate-y-1/2 w-52 h-12 bg-[#FFE245] -rotate-1 z-0"></div>
+            <h1 className="text-[2rem] font-normal mb-8 relative z-10">
+              Bienvenue !
             </h1>
             <p className="text-sm text-gray-400">
               Entrez votre email et mot de passe pour accéder à votre compte

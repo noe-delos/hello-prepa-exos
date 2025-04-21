@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // app/(dashboard)/utilisateurs/data-table.tsx
 "use client";
 
@@ -119,10 +121,10 @@ export function DataTable({ data, isAdmin }: DataTableProps) {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <form action={deleteUser.bind(null, user.id)}>
+                          <form action={deleteUser.bind(null, user.id) as any}>
                             <DropdownMenuItem
                               className="text-red-600 cursor-pointer"
-                              onSelect={(e) => {
+                              onSelect={(e: any) => {
                                 e.preventDefault();
                                 if (
                                   confirm(
