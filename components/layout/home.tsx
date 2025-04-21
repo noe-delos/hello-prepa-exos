@@ -19,10 +19,16 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function QuestionGenerator({ user }: any) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const greeting = user?.name ? `Bonjour ${user.name} !` : "Bonjour";
+
+  // Loading state
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // State for form values
   const [formState, setFormState] = useState({
@@ -50,11 +56,69 @@ export default function QuestionGenerator({ user }: any) {
     }
   }, []);
 
-  // Save preferences to localStorage
-  const saveFormState = () => {
+  // Save preferences to localStorage and trigger generation
+  const generateDocument = async () => {
+    if (!user || !user.id) {
+      toast.error("Vous devez être connecté pour générer un document");
+      return;
+    }
+
+    // Save preferences
     localStorage.setItem("formState", JSON.stringify(formState));
-    // Trigger generation logic here
-    console.log("Generating with options:", formState);
+
+    // Start loading state
+    setIsGenerating(true);
+
+    // Show loading toast
+    const toastId = toast.loading("Génération du document en cours...");
+
+    try {
+      // Call generate API with user ID
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          ...formState,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.error || "Une erreur est survenue lors de la génération"
+        );
+      }
+
+      const data = await response.json();
+
+      // Success toast
+      toast.success("Document généré avec succès!", {
+        id: toastId,
+        description:
+          "Vous pouvez télécharger le document ou le consulter dans votre historique.",
+        action: {
+          label: "Télécharger",
+          onClick: () => window.open(data.url, "_blank"),
+        },
+      });
+
+      // Invalidate the generations query to refresh the sidebar
+      queryClient.invalidateQueries({ queryKey: ["generations"] });
+    } catch (error) {
+      console.error("Generation error:", error);
+
+      // Error toast
+      toast.error("Erreur lors de la génération", {
+        id: toastId,
+        description:
+          error instanceof Error ? error.message : "Une erreur est survenue",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   // Update form state handlers
@@ -492,7 +556,6 @@ export default function QuestionGenerator({ user }: any) {
                     <SelectContent>
                       <SelectItem value="pdf">PDF</SelectItem>
                       <SelectItem value="docx">DOCX</SelectItem>
-                      <SelectItem value="html">HTML</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -503,9 +566,10 @@ export default function QuestionGenerator({ user }: any) {
               <Button
                 size="lg"
                 className="px-16 py-6 text-lg font-medium bg-amber-500 hover:bg-amber-600"
-                onClick={saveFormState}
+                onClick={generateDocument}
+                disabled={isGenerating}
               >
-                Générer
+                {isGenerating ? "Génération en cours..." : "Générer"}
               </Button>
             </div>
           </div>

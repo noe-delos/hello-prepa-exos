@@ -22,3 +22,16 @@ export type Database = {
     };
   };
 };
+
+export interface Generation {
+  id: string;
+  user_id: string;
+  sous_test: string;
+  niveau: string;
+  part_exercice: string;
+  document_type: string;
+  question_count: number;
+  output_format: string;
+  file_path: string;
+  created_at: string;
+}

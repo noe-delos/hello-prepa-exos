@@ -97,16 +97,16 @@ export default function LoginPage() {
           <div className="absolute bottom-0 left-0 w-full h-[40%] rounded-[1.5rem] bg-gradient-to-t from-black/80 to-transparent"></div>
 
           <div className="absolute bottom-0 left-0 p-4 md:p-6 z-10 text-white">
-            <h2 className="text-2xl md:text-4xl font-bold mb-1 flex flex-row items-center gap-2">
-              Rédaction d'exercises
+            <h2 className="text-2xl md:text-[2rem] font-bold mb-1 flex flex-row items-center gap-2">
+              Les fugues sont-elles des préludes ?
               <Icon
                 icon="mingcute:sparkles-fill"
                 className="text-white"
                 width={28}
               />
             </h2>
-            <p className="text-xs md:text-sm">
-              Votre outil interne de rédaction d'exercises.
+            <p className="text-xs md:text-sm pt-2">
+              Votre outil interne d'atomisation de la concurence.
             </p>
           </div>
         </div>

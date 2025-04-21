@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import localFont from "next/font/local";
+import { Toaster } from "sonner";
+import { ReactQueryProvider } from "@/utils/providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -14,8 +16,8 @@ export const musticaFont = localFont({
 export const mustica = musticaFont.style.fontFamily;
 
 export const metadata: Metadata = {
-  title: "Génération d'exercises",
-  description: "Génération d'exercices internes Hello Prépa",
+  title: "Outil admin",
+  description: "Outil admin Hello prepa",
 };
 
 export default function RootLayout({
@@ -26,7 +28,12 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <body className={musticaFont.className}>
-        <div className="min-h-screen bg-background flex">{children}</div>
+        <ReactQueryProvider>
+          <div className="min-h-screen bg-background flex">
+            <Toaster position="top-right" richColors />
+            {children}
+          </div>
+        </ReactQueryProvider>
       </body>
     </html>
   );
