@@ -1,5 +1,6 @@
-/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable react/no-unescaped-entities */
 
 "use client";
 
@@ -21,10 +22,12 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { useFileViewer } from "@/context/file-viewer-context";
 
 export default function QuestionGenerator({ user }: any) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { isOpen: isPanelOpen } = useFileViewer();
   const greeting = user?.name ? `Bonjour ${user.name} !` : "Bonjour";
 
   // Loading state
@@ -142,7 +145,12 @@ export default function QuestionGenerator({ user }: any) {
   };
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto p-4">
+    <div
+      className={cn(
+        "space-y-6 w-full mx-auto p-4 transition-all duration-300",
+        isPanelOpen ? "max-w-full" : "max-w-7xl"
+      )}
+    >
       <div className="flex justify-center items-center pb-3">
         <h1 className="text-[2rem] font-bold">{greeting}</h1>
       </div>
@@ -153,14 +161,23 @@ export default function QuestionGenerator({ user }: any) {
             Type de question
           </h3>
           <div className="space-y-8 pt-6">
-            {/* Section Sous-test et Niveau */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Section Sous-test et Niveau - Changes to single column when panel is open */}
+            <div
+              className={cn(
+                "grid gap-4 lg:gap-8",
+                isPanelOpen ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3"
+              )}
+            >
               {/* Sous-test */}
               <Card className="border">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg">Sous-test</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent
+                  className={cn(
+                    isPanelOpen ? "grid grid-cols-2 gap-2" : "space-y-3"
+                  )}
+                >
                   <div className="flex items-center gap-3">
                     <div
                       className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
@@ -325,7 +342,11 @@ export default function QuestionGenerator({ user }: any) {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg">Niveau</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent
+                  className={cn(
+                    isPanelOpen ? "grid grid-cols-3 gap-2" : "space-y-3"
+                  )}
+                >
                   <div className="flex items-center gap-3">
                     <div
                       className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
@@ -418,7 +439,11 @@ export default function QuestionGenerator({ user }: any) {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg">Part d'exercice</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent
+                  className={cn(
+                    isPanelOpen ? "grid grid-cols-2 gap-2" : "space-y-3"
+                  )}
+                >
                   <div className="flex items-center gap-3">
                     <div
                       className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
@@ -488,7 +513,14 @@ export default function QuestionGenerator({ user }: any) {
               <h3 className="font-medium text-lg bg-zinc-100 p-3 py-2 rounded-lg">
                 Format
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div
+                className={cn(
+                  "grid gap-4 lg:gap-8",
+                  isPanelOpen
+                    ? "grid-cols-1 md:grid-cols-3"
+                    : "grid-cols-1 md:grid-cols-3"
+                )}
+              >
                 <div className="space-y-3">
                   <Label htmlFor="format-select" className="text-base">
                     Type de document

@@ -1,19 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // src/app/api/generate/docx/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import {
-  Document,
-  Packer,
-  Paragraph,
-  HeadingLevel,
-  TextRun,
-  Table,
-  TableRow,
-  TableCell,
-  VerticalAlign,
-} from "docx";
-import { createClient } from "@/utils/supabase/server";
+import { Document, Packer, Paragraph, HeadingLevel } from "docx";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export async function POST(request: NextRequest) {
@@ -55,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // Add exercises
     if (Array.isArray(content.exercises)) {
-      content.exercises.forEach((exercise, index) => {
+      content.exercises.forEach((exercise: any, index: number) => {
         sections[0].children.push(
           // Exercise heading
           new Paragraph({
@@ -71,7 +60,7 @@ export async function POST(request: NextRequest) {
 
         // Add options if they exist
         if (Array.isArray(exercise.options)) {
-          exercise.options.forEach((option, optIndex) => {
+          exercise.options.forEach((option: any, optIndex: number) => {
             sections[0].children.push(
               new Paragraph({
                 text: `${String.fromCharCode(65 + optIndex)}. ${option}`,

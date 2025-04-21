@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import localFont from "next/font/local";
 import { Toaster } from "sonner";
 import { ReactQueryProvider } from "@/utils/providers";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const musticaFont = localFont({
   src: "../public/fonts/MusticaPro-SemiBold.otf", // Assuming you have this

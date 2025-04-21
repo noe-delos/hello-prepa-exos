@@ -16,7 +16,7 @@ import { useSidebarStore } from "@/store/sidebar-store";
 import { cn } from "@/lib/utils";
 import { User } from "@/types";
 import { createClient } from "@/utils/supabase/client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { GenerationHistory } from "@/components/history/GenerationHistory";
 import { Separator } from "@/components/ui/separator";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -32,8 +32,6 @@ export function Sidebar({ user }: SidebarProps) {
   const router = useRouter();
   const { isCollapsed, toggleSidebar } = useSidebarStore();
   const [isHovering, setIsHovering] = useState(false);
-
-  const isAdmin = user?.role === "admin";
 
   const navItems = [
     {
