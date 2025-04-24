@@ -66,7 +66,7 @@ export default function QuestionGenerator({ user }: any) {
       return;
     }
 
-    // Save preferences
+    // Save
     localStorage.setItem("formState", JSON.stringify(formState));
 
     // Start loading state
