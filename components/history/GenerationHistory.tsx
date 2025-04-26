@@ -8,7 +8,13 @@ import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/utils/supabase/client";
 import { User } from "@/types";
 import { Icon } from "@iconify/react";
-import { format } from "date-fns";
+import {
+  format,
+  isAfter,
+  isWithinInterval,
+  startOfDay,
+  subDays,
+} from "date-fns";
 import { fr } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +25,12 @@ import { cn } from "@/lib/utils";
 import { useFileViewer } from "@/context/file-viewer-context";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 
 // Define a Generation type
 interface Generation {
@@ -42,8 +53,17 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
   const router = useRouter();
   const { isCollapsed } = useSidebarStore();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const { openFile } = useFileViewer();
+
+  // Filter categories
+  const filterCategories = [
+    { id: "comprehension", name: "Compréhension" },
+    { id: "calcul", name: "Calcul" },
+    { id: "raisonnement", name: "Raisonnement" },
+    { id: "condMinimales", name: "Cond. Minimales" },
+  ];
 
   // Fetch generations using React Query
   const {
@@ -94,18 +114,41 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
     return format(new Date(dateString), "dd/MM", { locale: fr });
   };
 
-  // Filter generations based on search query
+  // Toggle filter category
+  const toggleFilter = (categoryId: string) => {
+    setActiveFilters((prev) =>
+      prev.includes(categoryId)
+        ? prev.filter((id) => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setActiveFilters([]);
+    setSelectedDate(undefined);
+  };
+
+  // Filter generations based on active filters and selected date
   const filteredGenerations = useMemo(() => {
     if (!generations) return [];
-    if (!searchQuery.trim()) return generations;
 
-    const query = searchQuery.toLowerCase();
     return generations.filter((gen) => {
-      const testName = getTestName(gen.sous_test).toLowerCase();
-      const docType = gen.document_type.toLowerCase();
-      return testName.includes(query) || docType.includes(query);
+      // Apply category filters
+      const passesTypeFilter =
+        activeFilters.length === 0 || activeFilters.includes(gen.sous_test);
+
+      // Apply date filter
+      let passesDateFilter = true;
+      if (selectedDate) {
+        const genDate = startOfDay(new Date(gen.created_at));
+        const filterDate = startOfDay(selectedDate);
+        passesDateFilter = genDate.getTime() === filterDate.getTime();
+      }
+
+      return passesTypeFilter && passesDateFilter;
     });
-  }, [generations, searchQuery]);
+  }, [generations, activeFilters, selectedDate]);
 
   // Handler for opening a file
   const handleOpenFile = async (filePath: string, id: string) => {
@@ -158,33 +201,90 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
     }
   };
 
+  // Check if any filters are active
+  const hasActiveFilters =
+    activeFilters.length > 0 || selectedDate !== undefined;
+
   if (!user) return null;
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* History header and search */}
-      <div className="mb-2 space-y-2">
-        {!isCollapsed && (
-          <>
+      {/* History header and filters */}
+      {!isCollapsed && (
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-foreground/60">
               Historique
             </h3>
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Rechercher..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-7 text-xs w-full py-1 pr-7"
-              />
-              <Icon
-                icon="solar:magnifer-linear"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-foreground/60 h-4 w-4"
-              />
-            </div>
-          </>
-        )}
-      </div>
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="h-6 px-2 text-xs"
+              >
+                Effacer
+              </Button>
+            )}
+          </div>
+
+          {/* Filter grid */}
+          <div className="grid grid-cols-2 gap-1">
+            {filterCategories.map((category) => (
+              <Button
+                key={category.id}
+                variant={
+                  activeFilters.includes(category.id) ? "default" : "outline"
+                }
+                size="sm"
+                onClick={() => toggleFilter(category.id)}
+                className={cn(
+                  "h-8 text-xs justify-center",
+                  activeFilters.includes(category.id)
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                )}
+              >
+                {category.name}
+              </Button>
+            ))}
+          </div>
+
+          {/* Date picker */}
+          <div className="flex justify-center mt-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={selectedDate ? "default" : "outline"}
+                  size="sm"
+                  className={cn(
+                    "w-full h-8 text-xs justify-between",
+                    selectedDate
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background"
+                  )}
+                >
+                  {selectedDate
+                    ? format(selectedDate, "dd/MM/yyyy", { locale: fr })
+                    : "Filtrer par date"}
+                  <Icon
+                    icon="solar:calendar-bold-duotone"
+                    className="ml-2 h-4 w-4"
+                  />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="center">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={setSelectedDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+      )}
 
       {/* Loading state */}
       {isLoading && (
@@ -208,14 +308,14 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
         </div>
       )}
 
-      {/* Empty state - for when there are no generations or no search results */}
+      {/* Empty state - for when there are no generations or no filter results */}
       {!isLoading && !error && (
         <>
           {filteredGenerations.length === 0 && !isCollapsed && (
             <div className="text-sm text-foreground/60 italic">
               {generations?.length === 0
                 ? "Aucune génération récente"
-                : "Aucun résultat pour cette recherche"}
+                : "Aucun résultat avec ces filtres"}
             </div>
           )}
         </>
@@ -266,8 +366,6 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
               ))}
             </div>
           </div>
-          {/* Fade-out effect at the bottom of the list */}
-          <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-50 dark:from-slate-950 to-transparent pointer-events-none"></div>
         </div>
       )}
     </div>

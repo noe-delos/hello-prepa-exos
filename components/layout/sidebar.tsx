@@ -206,8 +206,6 @@ export function Sidebar({ user }: SidebarProps) {
             {/* Add the history component inside a flex container with overflow handling */}
             <div className="flex-1 overflow-hidden flex flex-col">
               <GenerationHistory user={user} />
-              {/* Fade-out effect at the bottom of the history list */}
-              <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-50 dark:from-slate-950 to-transparent pointer-events-none"></div>
             </div>
           </div>
         </div>
