@@ -79,4 +79,19 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+  /* For Webkit browsers (Chrome, Edge, Safari) */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: #ececec; /* light gray */
+    border-radius: 10px;
+    border: none;
+  }
 }

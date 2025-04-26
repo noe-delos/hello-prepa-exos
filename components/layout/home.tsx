@@ -37,11 +37,14 @@ export default function QuestionGenerator({ user }: any) {
   const [formState, setFormState] = useState({
     sousTest: "condMinimales",
     niveau: "difficile",
-    partExercice: "inedits",
-    documentType: "polycopie",
-    questionCount: 20,
+    variationCount: 10,
+    ineditsCount: 10,
+    correctionType: "sansCorrection",
     outputFormat: "pdf",
   });
+
+  // Calculated total question count
+  const totalQuestionCount = formState.variationCount + formState.ineditsCount;
 
   // Load saved preferences from localStorage
   useEffect(() => {
@@ -66,6 +69,11 @@ export default function QuestionGenerator({ user }: any) {
       return;
     }
 
+    if (totalQuestionCount === 0) {
+      toast.error("Veuillez sélectionner au moins une question");
+      return;
+    }
+
     // Save
     localStorage.setItem("formState", JSON.stringify(formState));
 
@@ -84,7 +92,13 @@ export default function QuestionGenerator({ user }: any) {
         },
         body: JSON.stringify({
           userId: user.id,
-          ...formState,
+          sousTest: formState.sousTest,
+          niveau: formState.niveau,
+          variationCount: formState.variationCount,
+          ineditsCount: formState.ineditsCount,
+          correctionType: formState.correctionType,
+          outputFormat: formState.outputFormat,
+          questionCount: totalQuestionCount,
         }),
       });
 
@@ -133,14 +147,19 @@ export default function QuestionGenerator({ user }: any) {
     setFormState((prev) => ({ ...prev, niveau: value }));
   };
 
-  const handlePartExerciceChange = (value: any) => {
-    setFormState((prev) => ({ ...prev, partExercice: value }));
-  };
-
-  const handleQuestionCountChange = (value: any) => {
+  const handleVariationCountChange = (value: any) => {
+    const numValue = typeof value === "number" ? value : parseInt(value) || 0;
     setFormState((prev) => ({
       ...prev,
-      questionCount: typeof value === "number" ? value : parseInt(value) || 20,
+      variationCount: numValue,
+    }));
+  };
+
+  const handleIneditsCountChange = (value: any) => {
+    const numValue = typeof value === "number" ? value : parseInt(value) || 0;
+    setFormState((prev) => ({
+      ...prev,
+      ineditsCount: numValue,
     }));
   };
 
@@ -165,7 +184,7 @@ export default function QuestionGenerator({ user }: any) {
             <div
               className={cn(
                 "grid gap-4 lg:gap-8",
-                isPanelOpen ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3"
+                isPanelOpen ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"
               )}
             >
               {/* Sous-test */}
@@ -344,7 +363,7 @@ export default function QuestionGenerator({ user }: any) {
                 </CardHeader>
                 <CardContent
                   className={cn(
-                    isPanelOpen ? "grid grid-cols-3 gap-2" : "space-y-3"
+                    isPanelOpen ? "grid grid-cols-4 gap-2" : "space-y-3"
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -431,81 +450,115 @@ export default function QuestionGenerator({ user }: any) {
                       Difficile
                     </label>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => handleNiveauChange("mixte")}
+                    >
+                      <input
+                        type="radio"
+                        id="mixte"
+                        name="niveau"
+                        value="mixte"
+                        className="sr-only"
+                        checked={formState.niveau === "mixte"}
+                        onChange={() => {}}
+                      />
+                      <div
+                        className={cn(
+                          "h-3 w-3 rounded-full",
+                          formState.niveau === "mixte" ? "bg-[#FFE245]" : ""
+                        )}
+                      ></div>
+                    </div>
+                    <label
+                      htmlFor="mixte"
+                      onClick={() => handleNiveauChange("mixte")}
+                    >
+                      Mixte
+                    </label>
+                  </div>
                 </CardContent>
               </Card>
+            </div>
 
-              {/* Part d'exercice */}
-              <Card className="border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Part d'exercice</CardTitle>
-                </CardHeader>
-                <CardContent
-                  className={cn(
-                    isPanelOpen ? "grid grid-cols-2 gap-2" : "space-y-3"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
-                      onClick={() => handlePartExerciceChange("variation")}
-                    >
-                      <input
-                        type="radio"
-                        id="variation"
-                        name="part-exercice"
-                        value="variation"
-                        className="sr-only"
-                        checked={formState.partExercice === "variation"}
-                        onChange={() => {}}
-                      />
-                      <div
-                        className={cn(
-                          "h-3 w-3 rounded-full",
-                          formState.partExercice === "variation"
-                            ? "bg-[#FFE245]"
-                            : ""
-                        )}
-                      ></div>
-                    </div>
-                    <label
-                      htmlFor="variation"
-                      onClick={() => handlePartExerciceChange("variation")}
-                    >
-                      Variation
-                    </label>
+            {/* Questions distribution section */}
+            <div className="space-y-6">
+              <h3 className="font-medium text-lg bg-zinc-100 p-3 py-2 rounded-lg">
+                Répartition des questions
+              </h3>
+              <div
+                className={cn(
+                  "grid gap-4 lg:gap-8",
+                  isPanelOpen
+                    ? "grid-cols-1 md:grid-cols-2"
+                    : "grid-cols-1 md:grid-cols-2"
+                )}
+              >
+                {/* Variations */}
+                <div className="space-y-3">
+                  <Label htmlFor="variation-count" className="text-base">
+                    Nombre de variations
+                  </Label>
+                  <div className="flex gap-4 items-center">
+                    <Slider
+                      id="variation-slider"
+                      value={[formState.variationCount]}
+                      max={50}
+                      min={0}
+                      step={1}
+                      className="w-full"
+                      onValueChange={(value) =>
+                        handleVariationCountChange(value[0])
+                      }
+                    />
+                    <Input
+                      id="variation-count"
+                      type="number"
+                      min={0}
+                      max={50}
+                      value={formState.variationCount}
+                      onChange={(e) =>
+                        handleVariationCountChange(e.target.value)
+                      }
+                      className="w-16 text-center"
+                    />
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
-                      onClick={() => handlePartExerciceChange("inedits")}
-                    >
-                      <input
-                        type="radio"
-                        id="inedits"
-                        name="part-exercice"
-                        value="inedits"
-                        className="sr-only"
-                        checked={formState.partExercice === "inedits"}
-                        onChange={() => {}}
-                      />
-                      <div
-                        className={cn(
-                          "h-3 w-3 rounded-full",
-                          formState.partExercice === "inedits"
-                            ? "bg-[#FFE245]"
-                            : ""
-                        )}
-                      ></div>
-                    </div>
-                    <label
-                      htmlFor="inedits"
-                      onClick={() => handlePartExerciceChange("inedits")}
-                    >
-                      Inédits
-                    </label>
+                </div>
+
+                {/* Inédits */}
+                <div className="space-y-3">
+                  <Label htmlFor="inedits-count" className="text-base">
+                    Nombre d'inédits
+                  </Label>
+                  <div className="flex gap-4 items-center">
+                    <Slider
+                      id="inedits-slider"
+                      value={[formState.ineditsCount]}
+                      max={50}
+                      min={0}
+                      step={1}
+                      className="w-full"
+                      onValueChange={(value) =>
+                        handleIneditsCountChange(value[0])
+                      }
+                    />
+                    <Input
+                      id="inedits-count"
+                      type="number"
+                      min={0}
+                      max={50}
+                      value={formState.ineditsCount}
+                      onChange={(e) => handleIneditsCountChange(e.target.value)}
+                      className="w-16 text-center"
+                    />
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
+
+              <div className="text-center font-medium">
+                Nombre total de questions : {totalQuestionCount}
+              </div>
             </div>
 
             {/* Format section */}
@@ -517,59 +570,38 @@ export default function QuestionGenerator({ user }: any) {
                 className={cn(
                   "grid gap-4 lg:gap-8",
                   isPanelOpen
-                    ? "grid-cols-1 md:grid-cols-3"
-                    : "grid-cols-1 md:grid-cols-3"
+                    ? "grid-cols-1 md:grid-cols-2"
+                    : "grid-cols-1 md:grid-cols-2"
                 )}
               >
                 <div className="space-y-3">
-                  <Label htmlFor="format-select" className="text-base">
-                    Type de document
+                  <Label htmlFor="correction-type" className="text-base">
+                    Type de correction
                   </Label>
                   <Select
-                    value={formState.documentType}
+                    value={formState.correctionType}
                     onValueChange={(value) =>
-                      setFormState((prev) => ({ ...prev, documentType: value }))
+                      setFormState((prev) => ({
+                        ...prev,
+                        correctionType: value,
+                      }))
                     }
                   >
-                    <SelectTrigger id="format-select" className="h-10">
-                      <SelectValue placeholder="Sélectionner un format" />
+                    <SelectTrigger id="correction-type" className="h-10">
+                      <SelectValue placeholder="Sélectionner un type de correction" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="polycopie">Polycopié</SelectItem>
-                      <SelectItem value="fiche">Fiche</SelectItem>
-                      <SelectItem value="examen">Examen</SelectItem>
+                      <SelectItem value="sansCorrection">
+                        Pas de correction
+                      </SelectItem>
+                      <SelectItem value="correctionCourte">
+                        Version corrigée courte
+                      </SelectItem>
+                      <SelectItem value="correctionDetaillee">
+                        Correction détaillée
+                      </SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-
-                <div className="space-y-3">
-                  <Label htmlFor="question-count" className="text-base">
-                    Nombre de questions
-                  </Label>
-                  <div className="flex gap-4 items-center">
-                    <Slider
-                      id="question-slider"
-                      value={[formState.questionCount]}
-                      max={100}
-                      min={1}
-                      step={1}
-                      className="w-full"
-                      onValueChange={(value) =>
-                        handleQuestionCountChange(value[0])
-                      }
-                    />
-                    <Input
-                      id="question-count"
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={formState.questionCount}
-                      onChange={(e) =>
-                        handleQuestionCountChange(e.target.value)
-                      }
-                      className="w-16 text-center"
-                    />
-                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -599,7 +631,7 @@ export default function QuestionGenerator({ user }: any) {
                 size="lg"
                 className="px-16 py-6 text-lg font-medium bg-amber-500 hover:bg-amber-600"
                 onClick={generateDocument}
-                disabled={isGenerating}
+                disabled={isGenerating || totalQuestionCount === 0}
               >
                 {isGenerating ? "Génération en cours..." : "Générer"}
               </Button>

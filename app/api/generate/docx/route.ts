@@ -2,7 +2,23 @@
 
 // src/app/api/generate/docx/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { Document, Packer, Paragraph, HeadingLevel } from "docx";
+import {
+  Document,
+  Packer,
+  Paragraph,
+  HeadingLevel,
+  Header,
+  Footer,
+  TextRun,
+  AlignmentType,
+  BorderStyle,
+  Table,
+  TableRow,
+  TableCell,
+  Shading,
+  ShadingType,
+} from "docx";
+import * as path from "path";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export async function POST(request: NextRequest) {
@@ -20,24 +36,137 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
+    // Create header with text
+    const header = new Header({
+      children: [
+        new Paragraph({
+          spacing: {
+            before: 0,
+            after: 0,
+          },
+          children: [
+            new TextRun({
+              text: "Hello Prépa",
+              bold: true,
+            }),
+            new TextRun({
+              text: ". Notre ambition : te proposer la ",
+            }),
+            new TextRun({
+              text: "MEILLEURE",
+              bold: true,
+            }),
+            new TextRun({
+              text: " prépa avec les ",
+            }),
+            new TextRun({
+              text: "MEILLEURS",
+              bold: true,
+            }),
+            new TextRun({
+              text: " professeurs",
+            }),
+          ],
+        }),
+      ],
+    });
+
+    // Create footer with copyright and page number
+    const footer = new Footer({
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({
+              text: "© Hello Prépa – Tous droits réservés",
+            }),
+          ],
+        }),
+        // Page number box in the right corner
+        new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          children: [
+            // Create a simple table with one cell for the page number
+            new Table({
+              width: {
+                size: 600,
+                type: "dxa", // Unit in twentieths of a point (1/1440 of an inch)
+              },
+              rows: [
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      borders: {
+                        top: {
+                          style: BorderStyle.SINGLE,
+                          size: 1,
+                        },
+                        bottom: {
+                          style: BorderStyle.SINGLE,
+                          size: 1,
+                        },
+                        left: {
+                          style: BorderStyle.SINGLE,
+                          size: 1,
+                        },
+                        right: {
+                          style: BorderStyle.SINGLE,
+                          size: 1,
+                        },
+                      },
+                      width: {
+                        size: 600,
+                        type: "dxa",
+                      },
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.CENTER,
+                          children: [
+                            new TextRun({
+                              children: ["Page ", { type: "page-number" }],
+                            }),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+
     // Create Document sections
     const sections = [
       {
+        headers: {
+          default: header,
+        },
+        footers: {
+          default: footer,
+        },
         children: [
-          // Title
+          // Yellow rectangle with "Calcul - Séance 1" text on first page
           new Paragraph({
-            text: content.title || title,
-            heading: HeadingLevel.HEADING_1,
+            spacing: {
+              before: 200,
+              after: 400,
+            },
+            shading: {
+              type: ShadingType.SOLID,
+              color: "FFF1CC",
+            },
+            alignment: AlignmentType.CENTER,
+            children: [
+              new TextRun({
+                text: "Calcul - Séance 1",
+                bold: true,
+                size: 36, // 18pt font size (in half-points)
+              }),
+            ],
           }),
-
-          // Introduction
-          ...(content.introduction
-            ? [
-                new Paragraph({
-                  text: content.introduction,
-                }),
-              ]
-            : []),
         ],
       },
     ];
@@ -55,6 +184,14 @@ export async function POST(request: NextRequest) {
           // Question
           new Paragraph({
             text: exercise.question,
+          }),
+
+          // Add spacing after question
+          new Paragraph({
+            text: "",
+          }),
+          new Paragraph({
+            text: "",
           })
         );
 
@@ -70,6 +207,13 @@ export async function POST(request: NextRequest) {
               })
             );
           });
+
+          // Add spacing after options
+          sections[0].children.push(
+            new Paragraph({
+              text: "",
+            })
+          );
         }
 
         // Answer and explanation
@@ -95,6 +239,9 @@ export async function POST(request: NextRequest) {
 
         // Add spacing between exercises
         sections[0].children.push(
+          new Paragraph({
+            text: "",
+          }),
           new Paragraph({
             text: "",
           })

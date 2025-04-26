@@ -18,9 +18,14 @@ const GenerateRequestSchema = z.object({
     "calcul",
     "raisonnement",
   ]),
-  niveau: z.enum(["facile", "moyen", "difficile"]),
-  partExercice: z.enum(["variation", "inedits"]),
-  documentType: z.enum(["polycopie", "fiche", "examen"]),
+  niveau: z.enum(["facile", "moyen", "difficile", "mixte"]),
+  variationCount: z.number().int().min(0).max(50),
+  ineditsCount: z.number().int().min(0).max(50),
+  correctionType: z.enum([
+    "sansCorrection",
+    "correctionCourte",
+    "correctionDetaillee",
+  ]),
   questionCount: z.number().int().min(1).max(100),
   outputFormat: z.enum(["pdf", "docx"]),
 });
@@ -50,8 +55,9 @@ export async function POST(request: NextRequest) {
       userId,
       sousTest,
       niveau,
-      partExercice,
-      documentType,
+      variationCount,
+      ineditsCount,
+      correctionType,
       questionCount,
       outputFormat,
     } = validationResult.data;
@@ -60,8 +66,9 @@ export async function POST(request: NextRequest) {
       userId,
       sousTest,
       niveau,
-      partExercice,
-      documentType,
+      variationCount,
+      ineditsCount,
+      correctionType,
       questionCount,
       outputFormat,
     });
@@ -71,20 +78,69 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     console.log("API: Supabase admin client created successfully");
 
+    // Prepare distribution text for prompt
+    const distributionText = `avec ${variationCount} variations et ${ineditsCount} inédits`;
+
+    // Prepare correction type for prompt
+    let correctionDescription;
+    switch (correctionType) {
+      case "sansCorrection":
+        correctionDescription = "sans correction";
+        break;
+      case "correctionCourte":
+        correctionDescription = "avec une version corrigée courte";
+        break;
+      case "correctionDetaillee":
+        correctionDescription = "avec une correction détaillée";
+        break;
+    }
+
+    // Map correctionType to document_type for database compatibility
+    let documentType;
+    switch (correctionType) {
+      case "sansCorrection":
+        documentType = "polycopie";
+        break;
+      case "correctionCourte":
+        documentType = "fiche";
+        break;
+      case "correctionDetaillee":
+        documentType = "examen";
+        break;
+    }
+
+    // Determine part_exercice value based on which has more questions
+    const partExercice =
+      variationCount >= ineditsCount ? "variation" : "inedits";
+
+    // For "mixte" niveau, we'll use "moyen" for the database to maintain compatibility
+    const dbNiveau = niveau === "mixte" ? "moyen" : niveau;
+
     // Call OpenAI to generate exercises
-    const prompt = `Generate ${questionCount} ${niveau} difficulty exercises for the "${sousTest}" 
-                    test with "${partExercice}" style. Format it as a "${documentType}" document.
-                    For each exercise, include:
-                    1. A clear question
-                    2. Multiple choice options if applicable
-                    3. The correct answer
-                    4. A brief explanation
+    const prompt = `Générer ${questionCount} exercices ${
+      niveau === "mixte" ? "de niveaux variés" : `de niveau ${niveau}`
+    } 
+                    pour le sous-test "${sousTest}" ${distributionText}. 
+                    Fournir ces exercices ${correctionDescription}.
                     
-                    Return the content in a structured JSON format with these fields:
-                    - title: A title for the document
-                    - introduction: Brief introduction text
-                    - exercises: Array of exercise objects with question, options, answer, and explanation
-                    - conclusion: Brief conclusion text`;
+                    Pour chaque exercice, inclure :
+                    1. Une question claire
+                    2. Des options à choix multiples si applicable
+                    3. La réponse correcte ${
+                      correctionType !== "sansCorrection"
+                        ? "avec explication"
+                        : ""
+                    }
+                    
+                    Retourner le contenu dans un format JSON structuré avec ces champs :
+                    - title: Un titre pour le document
+                    - introduction: Texte d'introduction bref
+                    - exercises: Tableau d'objets exercice avec question, options, réponse ${
+                      correctionType !== "sansCorrection"
+                        ? "et explication"
+                        : ""
+                    }
+                    - conclusion: Texte de conclusion bref`;
 
     console.log("API: Calling OpenAI with prompt:", prompt);
     const completion = await openai.chat.completions.create({
@@ -93,7 +149,7 @@ export async function POST(request: NextRequest) {
         {
           role: "system",
           content:
-            "You are an expert educator specialized in creating educational exercises.",
+            "Vous êtes un expert en éducation spécialisé dans la création d'exercices pédagogiques en français.",
         },
         { role: "user", content: prompt },
       ],
@@ -191,11 +247,11 @@ export async function POST(request: NextRequest) {
       fileId = result.id;
     }
 
-    // Save to generations table
+    // Save to generations table using the original schema structure
     console.log("API: Saving generation to database:", {
       user_id: userId,
       sous_test: sousTest,
-      niveau: niveau,
+      niveau: dbNiveau,
       part_exercice: partExercice,
       document_type: documentType,
       question_count: questionCount,
@@ -208,7 +264,7 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id: userId,
         sous_test: sousTest,
-        niveau: niveau,
+        niveau: dbNiveau,
         part_exercice: partExercice,
         document_type: documentType,
         question_count: questionCount,

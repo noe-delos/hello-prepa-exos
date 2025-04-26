@@ -135,71 +135,82 @@ export function Sidebar({ user }: SidebarProps) {
           )}
         </div>
 
-        {/* Navigation items */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto mt-2 px-3">
-          <TooltipProvider delayDuration={300}>
-            {navItems.map((item) => (
-              <div key={item.href}>
-                {isCollapsed ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Link
-                        href={item.href}
-                        className={cn(
-                          "flex items-center justify-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
-                          pathname === item.href &&
-                            "bg-slate-200 dark:bg-slate-800"
-                        )}
-                      >
-                        <Icon
-                          icon={item.icon}
+        {/* Main sidebar content - flex-col with flex-1 to allow for proper stretching */}
+        <div className="flex flex-col flex-1 overflow-hidden">
+          {/* Navigation items */}
+          <nav className="p-2 space-y-1 px-3 mt-2">
+            <TooltipProvider delayDuration={300}>
+              {navItems.map((item) => (
+                <div key={item.href}>
+                  {isCollapsed ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href={item.href}
                           className={cn(
-                            "size-5 text-foreground/50 transition-all duration-300",
-                            pathname === item.href && "text-foreground"
+                            "flex items-center justify-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
+                            pathname === item.href &&
+                              "bg-slate-200 dark:bg-slate-800"
                           )}
-                        />
-                      </Link>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{item.title}</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
-                      pathname === item.href && "bg-slate-200 dark:bg-slate-800"
-                    )}
-                  >
-                    <Icon
-                      icon={item.icon}
+                        >
+                          <Icon
+                            icon={item.icon}
+                            className={cn(
+                              "size-5 text-foreground/50 transition-all duration-300",
+                              pathname === item.href && "text-foreground"
+                            )}
+                          />
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">{item.title}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Link
+                      href={item.href}
                       className={cn(
-                        "size-5 text-foreground/50",
-                        pathname === item.href && "text-foreground"
-                      )}
-                    />
-                    <motion.span
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.3, delay: 0.1 }}
-                      className={cn(
-                        "overflow-hidden whitespace-nowrap lowercase transition-all",
-                        pathname === item.href && "font-semibold"
+                        "flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors",
+                        pathname === item.href &&
+                          "bg-slate-200 dark:bg-slate-800"
                       )}
                     >
-                      {item.title}
-                    </motion.span>
-                  </Link>
-                )}
-              </div>
-            ))}
-          </TooltipProvider>
+                      <Icon
+                        icon={item.icon}
+                        className={cn(
+                          "size-5 text-foreground/50",
+                          pathname === item.href && "text-foreground"
+                        )}
+                      />
+                      <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.3, delay: 0.1 }}
+                        className={cn(
+                          "overflow-hidden whitespace-nowrap lowercase transition-all",
+                          pathname === item.href && "font-semibold"
+                        )}
+                      >
+                        {item.title}
+                      </motion.span>
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </TooltipProvider>
+          </nav>
 
           <Separator className="my-4" />
 
-          {/* Generation History Section */}
-          <GenerationHistory user={user} />
-        </nav>
+          {/* Generation History Section - with relative positioning to allow for fade effect */}
+          <div className="flex flex-col flex-1 px-3 overflow-hidden relative">
+            {/* Add the history component inside a flex container with overflow handling */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <GenerationHistory user={user} />
+              {/* Fade-out effect at the bottom of the history list */}
+              <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-50 dark:from-slate-950 to-transparent pointer-events-none"></div>
+            </div>
+          </div>
+        </div>
 
         {/* Logout button */}
         <div className="p-4 border-t border-slate-200 dark:border-slate-800">

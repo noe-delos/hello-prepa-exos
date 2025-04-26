@@ -1,0 +1,1637 @@
+import * as fs from "fs";
+import { Document, Packer, Paragraph, TextRun } from "docx";
+
+// Documents contain sections, you can have multiple sections per document, go here to learn more about sections
+// This simple example will only contain one section
+const doc = new Document({
+    sections: [
+        {
+            properties: {},
+            children: [
+                new Paragraph({
+                    children: [
+                        new TextRun("Hello World"),
+                        new TextRun({
+                            text: "Foo Bar",
+                            bold: true,
+                        }),
+                        new TextRun({
+                            text: "\tGithub is the best",
+                            bold: true,
+                        }),
+                    ],
+                }),
+            ],
+        },
+    ],
+});
+
+// Used to export the file into a .docx file
+Packer.toBuffer(doc).then((buffer) => {
+    fs.writeFileSync("My Document.docx", buffer);
+});
+
+// Done! A file called 'My Document.docx' will be in your file system.
+
+Document properties
+You can add properties to the Word document by specifying options, for example:
+
+const doc = new docx.Document({
+    creator: "Dolan Miu",
+    description: "My extremely interesting document",
+    title: "My Document",
+});
+Copy to clipboardErrorCopied
+Full list of options:
+Property	Type	Notes
+sections	ISectionOptions[]	Optional
+title	string	Optional
+subject	string	Optional
+creator	string	Optional
+keywords	string	Optional
+description	string	Optional
+lastModifiedBy	string	Optional
+revision	number	Optional
+externalStyles	string	Optional
+styles	IStylesOptions	Optional
+numbering	INumberingOptions	Optional
+comments	ICommentsOptions	Optional
+footnotes	Record<string, { children: Paragraph[] }>	Optional
+background	IDocumentBackgroundOptions	Optional
+features	{ trackRevisions?: boolean;  updateFields?: boolean; }	Optional
+compatabilityModeVersion	number	Optional
+compatibility	ICompatibilityOptions	Optional
+customProperties	 ICustomPropertyOptions[]	Optional
+evenAndOddHeaderAndFooters	boolean	Optional
+defaultTabStop	number	Optional
+fonts	 FontOptions[]	Optional
+hyphenation	IHyphenationOptions	Optional
+Change background color of Document
+Set the hex value in the document like so:
+
+const doc = new docx.Document({
+    background: {
+        color: "C45911",
+    },
+});
+Copy to clipboardErrorCopied
+You can mix and match whatever properties you want, or provide no properties.
+
+Units for positioning
+Various parts of the API require positioning arguments. The units are "20ths of a point" from the OOXML specification. See Lars Corneliussen's blog post for more information and how to convert units.
+
+Compatibility
+Compatibility Settings are optional settings used to preserve visual fidelity of documents created in earlier word processing applications. Some of these settings provide ability for specific behaviors, described in detail below; and others simply instruct applications to mimic the behavior of an existing word processing application.
+
+const doc = new docx.Document({
+    compatibility: {
+        version: 15,
+        doNotExpandShiftReturn: true,
+    },
+});
+Copy to clipboardErrorCopied
+Compatibility Options
+Property	Type	Notes	Possible Values
+version	number	Optional	15, 16, 17
+useSingleBorderforContiguousCells	boolean	Optional	true, false, undefined
+wordPerfectJustification	boolean	Optional	true, false, undefined
+noTabStopForHangingIndent	boolean	Optional	true, false, undefined
+noLeading	boolean	Optional	true, false, undefined
+spaceForUnderline	boolean	Optional	true, false, undefined
+noColumnBalance	boolean	Optional	true, false, undefined
+balanceSingleByteDoubleByteWidth	boolean	Optional	true, false, undefined
+noExtraLineSpacing	boolean	Optional	true, false, undefined
+doNotLeaveBackslashAlone	boolean	Optional	true, false, undefined
+underlineTrailingSpaces	boolean	Optional	true, false, undefined
+doNotExpandShiftReturn	boolean	Optional	true, false, undefined
+spacingInWholePoints	boolean	Optional	true, false, undefined
+lineWrapLikeWord6	boolean	Optional	true, false, undefined
+printBodyTextBeforeHeader	boolean	Optional	true, false, undefined
+printColorsBlack	boolean	Optional	true, false, undefined
+spaceWidth	boolean	Optional	true, false, undefined
+showBreaksInFrames	boolean	Optional	true, false, undefined
+subFontBySize	boolean	Optional	true, false, undefined
+suppressBottomSpacing	boolean	Optional	true, false, undefined
+suppressTopSpacing	boolean	Optional	true, false, undefined
+suppressSpacingAtTopOfPage	boolean	Optional	true, false, undefined
+suppressTopSpacingWP	boolean	Optional	true, false, undefined
+suppressSpBfAfterPgBrk	boolean	Optional	true, false, undefined
+swapBordersFacingPages	boolean	Optional	true, false, undefined
+convertMailMergeEsc	boolean	Optional	true, false, undefined
+truncateFontHeightsLikeWP6	boolean	Optional	true, false, undefined
+macWordSmallCaps	boolean	Optional	true, false, undefined
+usePrinterMetrics	boolean	Optional	true, false, undefined
+doNotSuppressParagraphBorders	boolean	Optional	true, false, undefined
+wrapTrailSpaces	boolean	Optional	true, false, undefined
+footnoteLayoutLikeWW8	boolean	Optional	true, false, undefined
+shapeLayoutLikeWW8	boolean	Optional	true, false, undefined
+alignTablesRowByRow	boolean	Optional	true, false, undefined
+forgetLastTabAlignment	boolean	Optional	true, false, undefined
+adjustLineHeightInTable	boolean	Optional	true, false, undefined
+autoSpaceLikeWord95	boolean	Optional	true, false, undefined
+noSpaceRaiseLower	boolean	Optional	true, false, undefined
+doNotUseHTMLParagraphAutoSpacing	boolean	Optional	true, false, undefined
+layoutRawTableWidth	boolean	Optional	true, false, undefined
+layoutTableRowsApart	boolean	Optional	true, false, undefined
+useWord97LineBreakRules	boolean	Optional	true, false, undefined
+doNotBreakWrappedTables	boolean	Optional	true, false, undefined
+doNotSnapToGridInCell	boolean	Optional	true, false, undefined
+selectFieldWithFirstOrLastCharacter	boolean	Optional	true, false, undefined
+applyBreakingRules	boolean	Optional	true, false, undefined
+doNotWrapTextWithPunctuation	boolean	Optional	true, false, undefined
+doNotUseEastAsianBreakRules	boolean	Optional	true, false, undefined
+useWord2002TableStyleRules	boolean	Optional	true, false, undefined
+growAutofit	boolean	Optional	true, false, undefined
+useFELayout	boolean	Optional	true, false, undefined
+useNormalStyleForList	boolean	Optional	true, false, undefined
+doNotUseIndentAsNumberingTabStop	boolean	Optional	true, false, undefined
+useAlternateEastAsianLineBreakRules	boolean	Optional	true, false, undefined
+allowSpaceOfSameStyleInTable	boolean	Optional	true, false, undefined
+doNotSuppressIndentation	boolean	Optional	true, false, undefined
+doNotAutofitConstrainedTables	boolean	Optional	true, false, undefined
+autofitToFirstFixedWidthCell	boolean	Optional	true, false, undefined
+underlineTabInNumberingList	boolean	Optional	true, false, undefined
+displayHangulFixedWidth	boolean	Optional	true, false, undefined
+splitPgBreakAndParaMark	boolean	Optional	true, false, undefined
+doNotVerticallyAlignCellWithSp	boolean	Optional	true, false, undefined
+doNotBreakConstrainedForcedTable	boolean	Optional	true, false, undefined
+ignoreVerticalAlignmentInTextboxes	boolean	Optional	true, false, undefined
+useAnsiKerningPairs	boolean	Optional	true, false, undefined
+cachedColumnBalance	boolean	Optional	true, false, undefined
+
+Section Type
+Setting the section type determines how the contents of the section will be placed relative to the previous section. E.g., There are five different types:
+
+CONTINUOUS
+EVEN_PAGE
+NEXT_COLUMN
+NEXT_PAGE
+ODD_PAGE
+const doc = new Document({
+    sections: [{
+        properties: {
+            type: SectionType.CONTINUOUS,
+        }
+        children: [
+            new Paragraph({
+                children: [new TextRun("Hello World")],
+            }),
+        ],
+    }];
+});
+
+
+Paragraph
+Everything (text, images, graphs etc) in OpenXML is organized in paragraphs.
+
+Paragraphs requires an understanding of Sections.
+
+You can create Paragraphs in the following ways:
+
+Shorthand
+import { Paragraph } from "docx";
+
+const paragraph = new Paragraph("Short hand Hello World");
+Copy to clipboardErrorCopied
+Children Method
+This method is useful for adding different text with different styles, symbols, or adding images inline.
+
+const paragraph = new Paragraph({
+    children: [new TextRun("Lorem Ipsum Foo Bar"), new TextRun("Hello World"), new SymbolRun("F071")],
+});
+Copy to clipboardErrorCopied
+Explicit
+const paragraph = new Paragraph({
+    text: "Short hand notation for adding text.",
+});
+Copy to clipboardErrorCopied
+After you create the paragraph, you must add the paragraph into a section:
+
+const doc = new Document({
+    sections: [{
+        children: [paragraph],
+    }];
+});
+Copy to clipboardErrorCopied
+Or the preferred convention, define the paragraph inside the section and remove the usage of variables:
+
+const doc = new Document({
+    sections: [{
+        children: [
+            new Paragraph({
+                children: [new TextRun("Lorem Ipsum Foo Bar"), new TextRun("Hello World")],
+            }),
+        ],
+    }];
+});
+Copy to clipboardErrorCopied
+Options
+This is the list of options for a paragraph. A detailed explanation is below:
+
+Property	Type	Mandatory?	Possible Values
+text	string	Optional	
+heading	HeadingLevel	Optional	HEADING_1, HEADING_2, HEADING_3, HEADING_4, HEADING_5, HEADING_6, TITLE
+border	IBorderOptions	Optional	top, bottom, left, right. Each of these are of type IBorderPropertyOptions. Click here for Example
+spacing	ISpacingProperties	Optional	See below for ISpacingProperties
+outlineLevel	number	Optional	
+alignment	AlignmentType	Optional	START, CENTER, END, BOTH, MEDIUM_KASHIDA, DISTRIBUTE, NUM_TAB, HIGH_KASHIDA, LOW_KASHIDA, THAI_DISTRIBUTE, LEFT, RIGHT, JUSTIFIED
+heading	HeadingLevel	Optional	
+bidirectional	boolean	Optional	
+thematicBreak	boolean	Optional	
+pageBreakBefore	boolean	Optional	
+contextualSpacing	boolean	Optional	
+indent	IIndentAttributesProperties	Optional	
+keepLines	boolean	Optional	
+keepNext	boolean	Optional	
+children	(TextRun or ImageRun or Hyperlink)[]	Optional	
+style	string	Optional	
+tabStop	{ left?: ITabStopOptions; right?: ITabStopOptions; maxRight?: { leader: LeaderType; }; center?: ITabStopOptions }	Optional	
+bullet	{ level: number }	Optional	
+numbering	{ num: ConcreteNumbering; level: number; custom?: boolean }	Optional	
+widowControl	boolean	Optional	
+frame	IFrameOptions	Optional	
+Text
+This is the text in a paragraph. You can also add text by using the Paragraph shorthand (mentioned above) or adding children.
+
+Example:
+
+const paragraph = new Paragraph({
+    text: "Hello World",
+});
+Copy to clipboardErrorCopied
+Heading
+Example:
+
+Setting a Heading 1 paragraph with "Hello World" as it's text:
+
+const paragraph = new Paragraph({
+    text: "Hello World",
+    heading: HeadingLevel.HEADING_1,
+});
+Copy to clipboardErrorCopied
+Border
+Add borders to a Paragraph. Good for making the Paragraph stand out. Border top and border bottom can be used as a horizontal rule (also known as horizontal line).
+
+IBorderPropertyOptions
+top, bottom, left, right of the border
+
+Property	Type	Notes
+color	string	Required
+space	number	Required
+style	string	Required
+size	number	Required
+Example:
+
+Add border on the top and the bottom of the paragraph
+
+const paragraph = new Paragraph({
+    text: "I have borders on my top and bottom sides!",
+    border: {
+        top: {
+            color: "auto",
+            space: 1,
+            style: "single",
+            size: 6,
+        },
+        bottom: {
+            color: "auto",
+            space: 1,
+            style: "single",
+            size: 6,
+        },
+    },
+});
+Copy to clipboardErrorCopied
+Shading
+Add color to an entire paragraph block
+
+const paragraph = new Paragraph({
+    text: "shading",
+    shading: {
+        type: ShadingType.REVERSE_DIAGONAL_STRIPE,
+        color: "00FFFF",
+        fill: "FF0000",
+    },
+});
+Copy to clipboardErrorCopied
+Widow Control
+Allow First/Last Line to Display on a Separate Page
+
+const paragraph = new Paragraph({
+    text: "shading",
+    widowControl: true,
+});
+Copy to clipboardErrorCopied
+Spacing
+Adding spacing between paragraphs
+
+ISpacingProperties
+Property	Type	Notes	Possible Values
+after	number	Optional	
+before	number	Optional	
+line	number	Optional	
+lineRule	LineRuleType	Optional	AT_LEAST, EXACTLY, EXACT, AUTO
+Note: The lineRule property has different values depending on the version of Word you are using. The EXACTLY value is only available in Word 2016 and above. Use EXACT for greater support, including LibreOffice etc. Read this issue for more information: https://github.com/dolanmiu/docx/issues/1773.
+
+Example:
+
+Add spacing before the paragraph:
+
+const paragraph = new Paragraph({
+    text: "Paragraph with spacing before",
+    spacing: {
+        before: 200,
+    },
+});
+Copy to clipboardErrorCopied
+Outline Level
+Example:
+
+const paragraph = new Paragraph({
+    outlineLevel: 0,
+});
+Copy to clipboardErrorCopied
+Styles
+To create styles, please refer to the styling documentation
+
+Word 2013 Styles menu
+
+Headings and titles
+import { HeadingLevel, Paragraph } from "docx";
+
+const paragraph = new Paragraph({
+    text: "Hello World",
+    heading: HeadingLevel.TITLE,
+});
+Copy to clipboardErrorCopied
+Text Alignment
+To change the text alignment of a paragraph, add an AlignmentType option on the paragraph.for center, left, right or justified:
+
+Example:
+
+const paragraph = new Paragraph({
+    text: "Hello World",
+    heading: HeadingLevel.HEADING_1,
+    alignment: AlignmentType.CENTER,
+});
+Copy to clipboardErrorCopied
+The above will create a heading 1 which is centered.
+
+Justified text with breaks
+When a paragraph is justified, you may want to not justify the contents of incomplete lines, which end in a soft line break.
+
+Justified line before
+
+This is possible to achieve using:
+
+this.doc.Settings.addCompatibility().doNotExpandShiftReturn();
+Copy to clipboardErrorCopied
+The result is:
+
+Justified line after
+
+Thematic Break
+To add a thematic break in the Paragraph:
+
+const paragraph = new docx.Paragraph("Amazing Heading");
+const paragraph = new Paragraph({
+    text: "Amazing Heading",
+    heading: HeadingLevel.HEADING_1,
+    thematicBreak: true,
+});
+Copy to clipboardErrorCopied
+The above example will create a heading with a page break directly under it.
+
+Page Break
+To move to a new page (insert a page break):
+
+const paragraph = new docx.Paragraph({
+    children: [new TextRun("Amazing Heading"), new PageBreak()],
+});
+Copy to clipboardErrorCopied
+The above example will create a heading and start a new page immediately afterwards.
+
+Page break before:
+This option (available in word) will make sure that the paragraph will start on a new page (if it's not already on a new page).
+
+const paragraph = new Paragraph({
+    text: "Hello World on another page",
+    pageBreakBefore: true,
+});
+Copy to clipboardErrorCopied
+Page Break Before in Word
+
+Example: https://github.com/dolanmiu/docx/blob/master/demo/15-page-break-before.ts
+
+Page break control
+Paragraphs have keepLines and keepNext properties that allow restricting page breaks within and between paragraphs. See this Microsoft article for more details.
+
+const paragraph = new Paragraph({
+    text: "Stay on the same page",
+    keepLines: true,
+    keepNext: true,
+});
+
+
+Text Runs
+TextRuns requires an understanding of Paragraphs.
+
+You can add multiple text runs in Paragraphs. This is the most verbose way of writing a Paragraph but it is also the most flexible:
+
+import { Paragraph, TextRun } from "docx";
+
+const paragraph = new Paragraph({
+    children: [new TextRun("My awesome text here for my university dissertation"), new TextRun("Foo Bar")],
+});
+Copy to clipboardErrorCopied
+Text objects have methods inside which changes the way the text is displayed.
+
+Typographical Emphasis
+More info here
+
+Bold
+const text = new TextRun({
+    text: "Foo Bar",
+    bold: true,
+});
+Copy to clipboardErrorCopied
+Italics
+const text = new TextRun({
+    text: "Foo Bar",
+    italics: true,
+});
+Copy to clipboardErrorCopied
+Underline
+Underline has a few options
+
+Options
+Property	Type	Notes	Possible Values
+type	UnderlineType	Optional	SINGLE, WORD, DOUBLE, THICK, DOTTED, DOTTEDHEAV, DASH, DASHEDHEAV, DASHLONG, DASHLONGHEAV, DOTDASH, DASHDOTHEAVY, DOTDOTDAS, DASHDOTDOTHEAVY, WAVE, WAVYHEAVY, WAVYDOUBLE
+color	string	Optional	Color Hex values
+Example:
+
+const text = new TextRun({
+    text: "and then underlined ",
+    underline: {
+        type: UnderlineType.DOUBLE,
+        color: "990011",
+    },
+});
+Copy to clipboardErrorCopied
+To do a simple vanilla underline:
+
+const text = new TextRun({
+    text: "and then underlined ",
+    underline: {},
+});
+Copy to clipboardErrorCopied
+Emphasis Mark
+const text = new TextRun({
+    text: "and then emphasis mark",
+    emphasisMark: {},
+});
+Copy to clipboardErrorCopied
+Shading and Highlighting
+const text = new TextRun({
+    text: "shading",
+    shading: {
+        type: ShadingType.REVERSE_DIAGONAL_STRIPE,
+        color: "00FFFF",
+        fill: "FF0000",
+    },
+});
+Copy to clipboardErrorCopied
+const text = new TextRun({
+    text: "highlighting",
+    highlight: "yellow",
+});
+Copy to clipboardErrorCopied
+Strike through
+const text = new TextRun({
+    text: "strike",
+    strike: true,
+});
+Copy to clipboardErrorCopied
+Double strike through
+const text = new TextRun({
+    text: "doubleStrike",
+    doubleStrike: true,
+});
+Copy to clipboardErrorCopied
+Superscript
+const text = new TextRun({
+    text: "superScript",
+    superScript: true,
+});
+Copy to clipboardErrorCopied
+Subscript
+const text = new TextRun({
+    text: "subScript",
+    subScript: true,
+});
+Copy to clipboardErrorCopied
+All Capitals
+const text = new TextRun({
+    text: "allCaps",
+    allCaps: true,
+});
+Copy to clipboardErrorCopied
+Small Capitals
+const text = new TextRun({
+    text: "smallCaps",
+    smallCaps: true,
+});
+Copy to clipboardErrorCopied
+Vanish and SpecVanish
+You may want to hide your text in your document.
+
+Vanish should affect the normal display of text, but an application may have settings to force hidden text to be displayed.
+
+const text = new TextRun({
+    text: "This text will be hidden",
+    vanish: true,
+});
+Copy to clipboardErrorCopied
+SpecVanish was typically used to ensure that a paragraph style can be applied to a part of a paragraph, and still appear as in the Table of Contents (which in previous word processors would ignore the use of the style if it were being used as a character style).
+
+const text = new TextRun({
+    text: "This text will be hidden forever.",
+    specVanish: true,
+});
+Copy to clipboardErrorCopied
+Break
+Sometimes you would want to put text underneath another line of text but inside the same paragraph.
+
+const text = new TextRun({
+    text: "break",
+    break: 1,
+});
+Copy to clipboardErrorCopied
+Adding two breaks:
+
+const text = new TextRun({
+    text: "break",
+    break: 2,
+});
+
+
+Images
+Images requires an understanding of Sections and Paragraphs.
+
+To create a floating image on top of text:
+
+const image = new ImageRun({
+    type: 'gif',
+    data: fs.readFileSync("./demo/images/pizza.gif"),
+    transformation: {
+        width: 200,
+        height: 200,
+    }
+    floating: {
+        horizontalPosition: {
+            offset: 1014400,
+        },
+        verticalPosition: {
+            offset: 1014400,
+        },
+    },
+});
+Copy to clipboardErrorCopied
+By default with no arguments, its an inline image:
+
+const image = new ImageRun({
+    type: 'gif',
+    data: fs.readFileSync("./demo/images/pizza.gif"),
+    transformation: {
+        width: 100,
+        height: 100,
+    },
+});
+Copy to clipboardErrorCopied
+Add it into the document by adding the image into a paragraph:
+
+const doc = new Document({
+    sections: [{
+        children: [
+            new Paragraph({
+                children: [image],
+            }),
+        ],
+    }];
+});
+Copy to clipboardErrorCopied
+Intro
+Adding images can be easily done by creating an instance of ImageRun. This can be added in a Paragraph or Hyperlink:
+
+const doc = new Document({
+    sections: [{
+        children: [
+            new Paragraph({
+                children: [
+                    new ImageRun({
+                        type: [IMAGE_TYPE],
+                        data: [IMAGE_BUFFER],
+                        transformation: {
+                            width: [IMAGE_SIZE],
+                            height: [IMAGE_SIZE],
+                        },
+                    }),
+                ],
+            }),
+        ],
+    }];
+});
+Copy to clipboardErrorCopied
+docx supports jpeg, jpg, bmp, gif and png
+
+Positioning
+Positioning is the method on how to place the image on the document
+
+Word Image Positioning
+
+Three types of image positioning is supported:
+
+Floating
+Inline
+By default, images are exported as Inline elements.
+
+Usage
+Pass options into the [POSITION_OPTIONS] mentioned in the Intro above.
+
+Floating
+To change the position the image to be on top of the text, simply add the floating property to the last argument. By default, the offsets are relative to the top left corner of the page. Offset units are in emus:
+
+const image = new ImageRun({
+    type: 'png',
+    data: buffer,
+    transformation: {
+        width: 903,
+        height: 1149,
+    },
+    floating: {
+        horizontalPosition: {
+            offset: 1014400, // relative: HorizontalPositionRelativeFrom.PAGE by default
+        },
+        verticalPosition: {
+            offset: 1014400, // relative: VerticalPositionRelativeFrom.PAGE by default
+        },
+    },
+});
+Copy to clipboardErrorCopied
+const image = new ImageRun({
+    type: 'png',
+    data: buffer,
+    transformation: {
+        width: 903,
+        height: 1149,
+    },
+    floating: {
+        horizontalPosition: {
+            relative: HorizontalPositionRelativeFrom.RIGHT_MARGIN,
+            offset: 1014400,
+        },
+        verticalPosition: {
+            relative: VerticalPositionRelativeFrom.BOTTOM_MARGIN,
+            offset: 1014400,
+        },
+    },
+});
+Copy to clipboardErrorCopied
+Options
+Full options you can pass into floating are:
+
+Property	Type	Notes
+horizontalPosition	HorizontalPositionOptions	Required
+verticalPosition	VerticalPositionOptions	Required
+allowOverlap	boolean	Optional
+lockAnchor	boolean	Optional
+behindDocument	boolean	Optional
+layoutInCell	boolean	Optional
+zIndex	number	Optional
+HorizontalPositionOptions are:
+
+Property	Type	Notes	Possible Values
+relative	HorizontalPositionRelativeFrom	Required	CHARACTER, COLUMN, INSIDE_MARGIN, LEFT_MARGIN, MARGIN, OUTSIDE_MARGIN, PAGE, RIGHT_MARGIN
+align	HorizontalPositionAlign	You can either have align or offset, not both	CENTER, INSIDE, LEFT, OUTSIDE, RIGHT
+offset	number	You can either have align or offset, not both	0 to Infinity
+VerticalPositionOptions are:
+
+Property	Type	Notes	Possible Values
+relative	VerticalPositionRelativeFrom	Required	BOTTOM_MARGIN, INSIDE_MARGIN, LINE, MARGIN, OUTSIDE_MARGIN, PAGE, PARAGRAPH, TOP_MARGIN
+align	VerticalPositionAlign	You can either have align or offset, not both	BOTTOM, CENTER, INSIDE, OUTSIDE, TOP
+offset	number	You can either have align or offset, not both	0 to Infinity
+Wrap text
+Wrapping only works for floating elements. Text will "wrap" around the floating image.
+
+Add wrap options inside the floating options:
+
+wrap: {
+    type: [TextWrappingType],
+    side: [TextWrappingSide],
+},
+Copy to clipboardErrorCopied
+For example:
+
+const image = new ImageRun({
+    type: 'gif',
+    data: fs.readFileSync("./demo/images/pizza.gif"),
+    transformation: {
+        width: 200,
+        height: 200,
+    },
+    floating: {
+        horizontalPosition: {
+            offset: 2014400,
+        },
+        verticalPosition: {
+            offset: 2014400,
+        },
+        wrap: {
+            type: TextWrappingType.SQUARE,
+            side: TextWrappingSide.BOTH_SIDES,
+        },
+    },
+});
+Copy to clipboardErrorCopied
+Wrap options have the following properties are:
+
+Property	Type	Notes	Possible Values
+type	TextWrappingType	Optional	NONE, SQUARE, TIGHT, TOP_AND_BOTTOM
+side	TextWrappingSide	Optional	BOTH_SIDES, LEFT, RIGHT, LARGEST
+Margins
+Margins give some space between the text and the image. Margins only work for floating elements. Additionally, the image must also be in wrap mode (see above).
+
+Be sure to also set wrap in your options!
+
+To use, add the margins options inside the floating options:
+
+margins: {
+    top: number,
+    bottom: number,
+    left: number,
+    right: number
+},
+Copy to clipboardErrorCopied
+For example:
+
+const image = new ImageRun({
+    type: 'gif',
+    data: fs.readFileSync("./demo/images/pizza.gif"),
+    transformation: {
+        width: 200,
+        height: 200,
+    },
+    floating: {
+        horizontalPosition: {
+            offset: 2014400,
+        },
+        verticalPosition: {
+            offset: 2014400,
+        },
+        wrap: {
+            type: TextWrappingType.SQUARE,
+            side: TextWrappingSide.BOTH_SIDES,
+        },
+        margins: {
+            top: 201440,
+            bottom: 201440,
+        },
+    },
+});
+Copy to clipboardErrorCopied
+Alternative Text
+Specifies common non-visual DrawingML properties. A name, title and description for a picture can be specified.
+
+const image = new ImageRun({
+    type: 'gif',
+    data: fs.readFileSync("./demo/images/pizza.gif"),
+    altText: {
+        title: "This is an ultimate title",
+        description: "This is an ultimate image",
+        name: "My Ultimate Image",
+    },
+});
+Copy to clipboardErrorCopied
+Options
+Property	Type	Notes	Possible Values
+name	string	Required	Specimen A
+title	string	Required	My awesome title of my image
+description	string	Required	My awesome description of my image
+Examples
+Add image to the document
+Importing Images from file system path
+
+// Example of how to add images to the document - You can use Buffers, UInt8Arrays or Base64 strings
+
+import * as fs from "fs";
+import {
+    convertMillimetersToTwip,
+    Document,
+    HorizontalPositionAlign,
+    HorizontalPositionRelativeFrom,
+    ImageRun,
+    Packer,
+    Paragraph,
+    VerticalPositionAlign,
+    VerticalPositionRelativeFrom,
+} from "docx";
+
+const doc = new Document({
+    sections: [
+        {
+            children: [
+                new Paragraph("Hello World"),
+                new Paragraph({
+                    children: [
+                        new ImageRun({
+                            type: "jpg",
+                            data: fs.readFileSync("./demo/images/image1.jpeg"),
+                            transformation: {
+                                width: 100,
+                                height: 100,
+                            },
+                            altText: {
+                                title: "This is an ultimate title",
+                                description: "This is an ultimate image",
+                                name: "My Ultimate Image",
+                            },
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    children: [
+                        new ImageRun({
+                            type: "png",
+                            data: fs.readFileSync("./demo/images/dog.png").toString("base64"),
+                            transformation: {
+                                width: 100,
+                                height: 100,
+                            },
+                            outline: {
+                                type: "solidFill",
+                                solidFillType: "rgb",
+                                value: "FF0000",
+                            },
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    children: [
+                        new ImageRun({
+                            type: "jpg",
+                            data: fs.readFileSync("./demo/images/cat.jpg"),
+                            transformation: {
+                                width: 100,
+                                height: 100,
+                                flip: {
+                                    vertical: true,
+                                },
+                            },
+                            outline: {
+                                type: "solidFill",
+                                solidFillType: "rgb",
+                                value: "0000FF",
+                                width: convertMillimetersToTwip(600),
+                            },
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    children: [
+                        new ImageRun({
+                            type: "bmp",
+                            data: fs.readFileSync("./demo/images/parrots.bmp"),
+                            transformation: {
+                                width: 150,
+                                height: 150,
+                                flip: {
+                                    horizontal: true,
+                                },
+                                rotation: 225,
+                            },
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    children: [
+                        new ImageRun({
+                            type: "gif",
+                            data: fs.readFileSync("./demo/images/pizza.gif"),
+                            transformation: {
+                                width: 200,
+                                height: 200,
+                                flip: {
+                                    horizontal: true,
+                                    vertical: true,
+                                },
+                            },
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    children: [
+                        new ImageRun({
+                            type: "gif",
+                            data: fs.readFileSync("./demo/images/pizza.gif"),
+                            transformation: {
+                                width: 200,
+                                height: 200,
+                                rotation: 45,
+                            },
+                            floating: {
+                                zIndex: 10,
+                                horizontalPosition: {
+                                    offset: 1014400,
+                                },
+                                verticalPosition: {
+                                    offset: 1014400,
+                                },
+                            },
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    children: [
+                        new ImageRun({
+                            type: "jpg",
+                            data: fs.readFileSync("./demo/images/cat.jpg"),
+                            transformation: {
+                                width: 200,
+                                height: 200,
+                            },
+                            floating: {
+                                zIndex: 5,
+                                horizontalPosition: {
+                                    relative: HorizontalPositionRelativeFrom.PAGE,
+                                    align: HorizontalPositionAlign.RIGHT,
+                                },
+                                verticalPosition: {
+                                    relative: VerticalPositionRelativeFrom.PAGE,
+                                    align: VerticalPositionAlign.BOTTOM,
+                                },
+                            },
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    children: [
+                        new ImageRun({
+                            type: "svg",
+                            data: fs.readFileSync("./demo/images/linux-svg.svg"),
+                            transformation: {
+                                width: 200,
+                                height: 200,
+                            },
+                            fallback: {
+                                type: "png",
+                                data: fs.readFileSync("./demo/images/linux-png.png"),
+                            },
+                        }),
+                    ],
+                }),
+            ],
+        },
+    ],
+});
+
+Packer.toBuffer(doc).then((buffer) => {
+    fs.writeFileSync("My Document.docx", buffer);
+});
+Copy to clipboardErrorCopied
+Source: https://github.com/dolanmiu/docx/blob/master/demo/5-images.ts
+
+Add images to header and footer
+Example showing how to add image to headers and footers
+
+// Add images to header and footer
+
+import * as fs from "fs";
+import { Document, Footer, Header, ImageRun, Packer, Paragraph } from "docx";
+
+const doc = new Document({
+    sections: [
+        {
+            headers: {
+                default: new Header({
+                    children: [
+                        new Paragraph({
+                            children: [
+                                new ImageRun({
+                                    data: fs.readFileSync("./demo/images/pizza.gif"),
+                                    transformation: {
+                                        width: 100,
+                                        height: 100,
+                                    },
+                                }),
+                            ],
+                        }),
+                    ],
+                }),
+            },
+            footers: {
+                default: new Footer({
+                    children: [
+                        new Paragraph({
+                            children: [
+                                new ImageRun({
+                                    data: fs.readFileSync("./demo/images/pizza.gif"),
+                                    transformation: {
+                                        width: 100,
+                                        height: 100,
+                                    },
+                                }),
+                            ],
+                        }),
+                    ],
+                }),
+            },
+            children: [new Paragraph("Hello World")],
+        },
+    ],
+});
+
+Packer.toBuffer(doc).then((buffer) => {
+    fs.writeFileSync("My Document.docx", buffer);
+});
+Copy to clipboardErrorCopied
+Source: https://github.com/dolanmiu/docx/blob/master/demo/9-images-in-header-and-footer.ts
+
+Floating images
+Example showing how to float images on top of text and optimally give a margin
+
+// Example of how to "wrap" text around an image
+
+import * as fs from "fs";
+// import { Document, Packer, Paragraph } from "docx";
+import { Document, ImageRun, Packer, Paragraph, TextWrappingSide, TextWrappingType } from "docx";
+
+const doc = new Document({
+    sections: [
+        {
+            children: [
+                new Paragraph(
+                    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque vehicula nec nulla vitae efficitur. Ut interdum mauris eu ipsum rhoncus, nec pharetra velit placerat. Sed vehicula libero ac urna molestie, id pharetra est pellentesque. Praesent iaculis vehicula fringilla. Duis pretium gravida orci eu vestibulum. Mauris tincidunt ipsum dolor, ut ornare dolor pellentesque id. Integer in nulla gravida, lacinia ante non, commodo ex. Vivamus vulputate nisl id lectus finibus vulputate. Ut et nisl mi. Cras fermentum augue arcu, ac accumsan elit euismod id. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Sed ac posuere nisi. Pellentesque tincidunt vehicula bibendum. Phasellus eleifend viverra nisl.",
+                ),
+                new Paragraph(
+                    "Proin ac purus faucibus, porttitor magna ut, cursus nisl. Vivamus ante purus, porta accumsan nibh eget, eleifend dignissim odio. Integer sed dictum est, aliquam lacinia justo. Donec ultrices auctor venenatis. Etiam interdum et elit nec elementum. Pellentesque nec viverra mauris. Etiam suscipit leo nec velit fringilla mattis. Pellentesque justo lacus, sodales eu condimentum in, dapibus finibus lacus. Morbi vitae nibh sit amet sem molestie feugiat. In non porttitor enim.",
+                ),
+                new Paragraph(
+                    "Ut eget diam cursus quam accumsan interdum at id ante. Ut mollis mollis arcu, eu scelerisque dui tempus in. Quisque aliquam, augue quis ornare aliquam, ex purus ultrices mauris, ut porta dolor dolor nec justo. Nunc a tempus odio, eu viverra arcu. Suspendisse vitae nibh nec mi pharetra tempus. Mauris ut ullamcorper sapien, et sagittis sapien. Vestibulum in urna metus. In scelerisque, massa id bibendum tempus, quam orci rutrum turpis, a feugiat nisi ligula id metus. Praesent id dictum purus. Proin interdum ipsum nulla.",
+                ),
+                new Paragraph({
+                    children: [
+                        new ImageRun({
+                            data: fs.readFileSync("./demo/images/pizza.gif"),
+                            transformation: {
+                                width: 200,
+                                height: 200,
+                            },
+                            floating: {
+                                horizontalPosition: {
+                                    offset: 2014400,
+                                },
+                                verticalPosition: {
+                                    offset: 2014400,
+                                },
+                                wrap: {
+                                    type: TextWrappingType.SQUARE,
+                                    side: TextWrappingSide.BOTH_SIDES,
+                                },
+                                margins: {
+                                    top: 201440,
+                                    bottom: 201440,
+                                },
+                            },
+                        }),
+                    ],
+                }),
+            ],
+        },
+    ],
+});
+
+Packer.toBuffer(doc).then((buffer) => {
+    fs.writeFileSync("My Document.docx", buffer);
+});
+Copy to clipboardErrorCopied
+Source: https://github.com/dolanmiu/docx/blob/master/demo/38-text-wrapping.ts
+
+
+Headers and Footers
+Headers and Footers requires an understanding of Sections.
+
+Every Section has a sections which you can define its Headers and Footers:
+
+const doc = new Document({
+    sections: [{
+        headers: {
+            default: new Header({ // The standard default header on every page or header on odd pages when the 'Different Odd & Even Pages' option is activated
+                children: [],
+            }),
+            first: new Header({ // The header on first page when the 'Different First Page' option is activated
+                children: [],
+            }),
+            even: new Header({ // The header on even pages when the 'Different Odd & Even Pages' option is activated
+                children: [],
+            }),
+        },
+        footers: {
+            default: new Footer({ // The standard default footer on every page or footer on odd pages when the 'Different Odd & Even Pages' option is activated
+                children: [],
+            }),
+            first: new Footer({ // The footer on first page when the 'Different First Page' option is activated
+                children: [],
+            }),
+            even: new Footer({ // The footer on even pages when the 'Different Odd & Even Pages' option is activated
+                children: [],
+            }),
+        },
+        children: [],
+    }];
+});
+Copy to clipboardErrorCopied
+Example
+Example showing basic header and footer
+
+// Add text to header and footer
+
+import * as fs from "fs";
+import { Document, Footer, Header, Packer, Paragraph } from "docx";
+
+const doc = new Document({
+    sections: [
+        {
+            headers: {
+                default: new Header({
+                    children: [new Paragraph("Header text")],
+                }),
+            },
+            footers: {
+                default: new Footer({
+                    children: [new Paragraph("Footer text")],
+                }),
+            },
+            children: [new Paragraph("Hello World")],
+        },
+    ],
+});
+
+Packer.toBuffer(doc).then((buffer) => {
+    fs.writeFileSync("My Document.docx", buffer);
+});
+Copy to clipboardErrorCopied
+Source: https://github.com/dolanmiu/docx/blob/master/demo/8-header-footer.ts
+
+Different First Page
+To specify 'Different First Page', set titlePage: true in the sections array as shown below.
+
+sections: [
+        {
+          properties: {
+            titlePage: true,
+Copy to clipboardErrorCopied
+Multiple Headers and Footers
+More headers and footers can be accomplished by creating more Section. New headers and footers can be set per Section
+
+
+Styling with JS
+Example
+const para = new Paragraph({
+    text: "To whom it may concern:",
+    heading: HeadingLevel.HEADING_2,
+    alignment: AlignmentType.CENTER,
+});
+
+const name = new TextRun({
+    text: "Name:",
+    bold: true,
+    font: "Calibri",
+    allCaps: true,
+});
+Copy to clipboardErrorCopiedCopy to clipboardErrorCopied
+Available Options
+Run formatting
+bold, italics, smallCaps, allCaps, strike, doubleStrike, subScript, superScript: Set the formatting property to true
+underline({type="single", color=null}): Set the underline style and color
+emphasisMark({type="dot"}): Set the emphasis mark style
+color(color): Set the text color, using 6 hex characters for RRGGBB (no leading #)
+size(halfPts): Set the font size, measured in half-points
+font(name) or font({ascii, cs, eastAsia, hAnsi, hint}): Set the run's font
+style(name): Apply a named run style
+characterSpacing(value): Set the character spacing adjustment (in TWIPs)
+Paragraph formatting
+heading1, heading2, heading3, heading4, heading5, title: apply the appropriate style to the paragraph
+left, center, right, justified: set the paragraph's alignment
+thematicBreak, pageBreak: Insert a thick rule or a page break beneath the paragraph
+leftTabStop(position): Add a left tab stop (measured in TWIPs from the left)
+maxRightTabStop: Add a right tab stop at the far right
+bullet: Use the default bullet style
+setNumbering(numbering, indentLevel): Use a custom numbering format for the paragraph
+style(name): Apply a named paragraph style
+indent(start, hanging=0): Set the paragraph's indent level (in TWIPs)
+spacing({before=0, after=0, line=0}): Set the line and before/after on the paragraph. Before/after is measured in TWIPs, line is measured in 240ths of a line
+Paragraph styles have all the run formatting methods, except style(), and left(), center(), right(), justified(), thematicBreak(), leftTabStop(position), maxRightTabStop(), indent(start, hanging=0), and spacing({before=0, after=0, line=0}) methods.
+
+Detailed guide
+There are 4 items in docx that can be styled:
+
+Characters: Attributes that can change within a paragraph. e.g., bold, italics, etc.
+Paragraphs: Attributes like indent, text alignment, line spacing, etc.
+Tables: Border styles, table formats, etc.
+List items: These are the numbers and bullets that are automatically inserted
+There are a few different ways of styling this content in docx, which somewhat resemble the HTML/CSS approach. In order of greatest to lowest priority:
+
+Direct formatting (inline formatting)
+Declaritive Styles (similar to external CSS)
+Document defaults (similar to a * rule in CSS)
+Unlike CSS, less specific rules don't necessarily override parent rules. The rules are a bit wonky, but if you're interested, see the [advanced formatting section](#Advanced formatting).
+
+Direct formatting (inline formatting)
+This is the type of formatting that your uncle uses when he types out documents: N ... a ... m ... e ... : Then he grabs the mouse, highlights Name: and moves over to the B for bold. This manner of formatting results in markup that is similar to writing <span style="bold: true">Name:</span> if you were typing out HTML. docx (the format) allows you to specify this for any of the four types of items. docx (the library) only supports this type of formatting for paragraphs and characters, using a fluent api. Thus you could do:
+
+const name = new TextRun({
+    text: "Name:",
+    bold: true,
+    font: "Calibri",
+    allCaps: true,
+});
+Copy to clipboardErrorCopiedCopy to clipboardErrorCopied
+Or for paragraph formatting:
+
+const para = new Paragraph({
+    text: "To whom it may concern:",
+    heading: HeadingLevel.HEADING_2,
+    alignment: AlignmentType.CENTER,
+});
+Copy to clipboardErrorCopiedCopy to clipboardErrorCopied
+Declaritive Styles (similar to external CSS)
+docx files contain a styles section separate from the main content, much like how HTML includes CSS files. Unlike CSS, docx distinguishes between styles meant for tables (which show up in the table formatting toolbar), styles for lists (which show up under bullets and numbering), and styles for runs and paragraphs, which show up as dropdowns offering standard styles, like "Heading 1", "Caption", or any custom styles defined in that document. . docx allows you to define these styles using a fluent interface as well.
+
+To add styles, define your custom styles in the document:
+
+// The first argument is an ID you use to apply the style to paragraphs
+// The second argument is a human-friendly name to show in the UI
+const doc = new Document({
+    creator: "Clippy",
+    title: "Sample Document",
+    description: "A brief example of using docx",
+    styles: {
+        paragraphStyles: [
+            {
+                id: "myWonkyStyle",
+                name: "My Wonky Style",
+                basedOn: "Normal",
+                next: "Normal",
+                quickFormat: true,
+                run: {
+                    italics: true,
+                    color: "999999",
+                },
+                paragraph: {
+                    spacing: {
+                        line: 276,
+                    },
+                    indent: {
+                        left: 720,
+                    },
+                },
+            },
+            {
+                id: "Heading2",
+                name: "Heading 2",
+                basedOn: "Normal",
+                next: "Normal",
+                quickFormat: true,
+                run: {
+                    size: 26,
+                    bold: true,
+                    color: "999999",
+                    underline: {
+                        type: UnderlineType.DOUBLE,
+                        color: "FF0000",
+                    },
+                },
+                paragraph: {
+                    spacing: {
+                        before: 240,
+                        after: 120
+                    },
+                },
+            },
+        ]
+    }
+});
+Copy to clipboardErrorCopiedCopy to clipboardErrorCopied
+Note: If you are using the .headingX or .title methods of paragraphs, you must make sure to define HeadingX or Title styles for these. Otherwise they'll show up un-styled :(. If you are using the .bullet or .setNumbering methods, you need to define a ListParagraph style or the numbers may not show up.
+
+Document defaults
+Setting document defaults acts like a * rule in CSS: it applies to every paragraph and run in the document, but at a low priority level. Other styles affecting this property will override these defaults.
+
+Advanced formatting
+Style inheritance
+Styles may define a basedOn attribute that references another style of the same type. In this case, any unspecified properties are inherited from the parent style.
+
+Interactions between the 4 items
+In addition to the 3-layer hierarchy spelled above, there is some interaction between the 4 items that you can style. For instance numbering styles may also specify some styling for paragraphs (typically indentation and tab stops); paragraphs may specify character formatting (e.g., heading font sizes); etc.
+
+The elements that each style may affect are summarized in the table below. So, e.g., table styles may specify table formatting, paragraph formatting, and character formatting.
+
+Style type	Table	Paragraph	List item	Characters
+Document defaults		X		X
+Table	X	X		X
+Paragraph		X	X	X
+Numbering		X	X	
+Character				X
+Direct formatting	X	X	X	X
+To determine the value of a styling property, you must first identify whether it's a table, paragraph, list item, or character property. E.g., numbering definition is a list item property. Then you need to find the last row in the table for which that property has an "X" and the document has formatting of that type. So if a particular run was in a paragraph whose style specified color as FF0000, but it also had a character style specifying color as 00DD00, then the character style (lower down on the table) would trump, and the character would have color 00DD00.
+
+Toggle properties
+The following properties are treated in a special manner; they're called toggle properties:
+
+Bold
+All caps
+Small caps
+Italics
+Single strike-through
+Hidden
+Imprint
+Emboss
+Character outline
+Character shadow
+For these properties, the rules state the following conflict resolution in case the property is specified at multiple points for the same item:
+
+Direct formatting trumps all if specified (either true or false)
+Otherwise, if the property is true in document defaults, the property is set to true
+Otherwise, the property's value is an XOR of its effective table, paragraph, and character values. (So specifying bold true on a table style and a paragraph style would result in non-bold text if a paragraph inside the table had that style)
+Examples
+Declarative styles
+Importing Images from file system path
+
+// Example on how to customize the look at feel using Styles
+
+import * as fs from "fs";
+import { AlignmentType, convertInchesToTwip, Document, HeadingLevel, LevelFormat, Packer, Paragraph, TextRun, UnderlineType } from "docx";
+
+const doc = new Document({
+    creator: "Clippy",
+    title: "Sample Document",
+    description: "A brief example of using docx",
+    styles: {
+        default: {
+            heading1: {
+                run: {
+                    size: 28,
+                    bold: true,
+                    italics: true,
+                    color: "FF0000",
+                },
+                paragraph: {
+                    spacing: {
+                        after: 120,
+                    },
+                },
+            },
+            heading2: {
+                run: {
+                    size: 26,
+                    bold: true,
+                    underline: {
+                        type: UnderlineType.DOUBLE,
+                        color: "FF0000",
+                    },
+                },
+                paragraph: {
+                    spacing: {
+                        before: 240,
+                        after: 120,
+                    },
+                },
+            },
+            listParagraph: {
+                run: {
+                    color: "#FF0000",
+                },
+            },
+            document: {
+                run: {
+                    size: "11pt",
+                    font: "Calibri",
+                },
+                paragraph: {
+                    alignment: AlignmentType.RIGHT,
+                },
+            },
+        },
+        paragraphStyles: [
+            {
+                id: "aside",
+                name: "Aside",
+                basedOn: "Normal",
+                next: "Normal",
+                run: {
+                    color: "999999",
+                    italics: true,
+                },
+                paragraph: {
+                    indent: {
+                        left: convertInchesToTwip(0.5),
+                    },
+                    spacing: {
+                        line: 276,
+                    },
+                },
+            },
+            {
+                id: "wellSpaced",
+                name: "Well Spaced",
+                basedOn: "Normal",
+                quickFormat: true,
+                paragraph: {
+                    spacing: { line: 276, before: 20 * 72 * 0.1, after: 20 * 72 * 0.05 },
+                },
+            },
+            {
+                id: "strikeUnderline",
+                name: "Strike Underline",
+                basedOn: "Normal",
+                quickFormat: true,
+                run: {
+                    strike: true,
+                    underline: {
+                        type: UnderlineType.SINGLE,
+                    },
+                },
+            },
+        ],
+        characterStyles: [
+            {
+                id: "strikeUnderlineCharacter",
+                name: "Strike Underline",
+                basedOn: "Normal",
+                quickFormat: true,
+                run: {
+                    strike: true,
+                    underline: {
+                        type: UnderlineType.SINGLE,
+                    },
+                },
+            },
+        ],
+    },
+    numbering: {
+        config: [
+            {
+                reference: "my-crazy-numbering",
+                levels: [
+                    {
+                        level: 0,
+                        format: LevelFormat.LOWER_LETTER,
+                        text: "%1)",
+                        alignment: AlignmentType.LEFT,
+                    },
+                ],
+            },
+        ],
+    },
+    sections: [
+        {
+            children: [
+                new Paragraph({
+                    text: "Test heading1, bold and italicized",
+                    heading: HeadingLevel.HEADING_1,
+                }),
+                new Paragraph("Some simple content"),
+                new Paragraph({
+                    text: "Test heading2 with double red underline",
+                    heading: HeadingLevel.HEADING_2,
+                }),
+                new Paragraph({
+                    text: "Option1",
+                    numbering: {
+                        reference: "my-crazy-numbering",
+                        level: 0,
+                    },
+                    style: "aside",
+                }),
+                new Paragraph({
+                    text: "Option5 -- override 2 to 5",
+                    numbering: {
+                        reference: "my-crazy-numbering",
+                        level: 0,
+                    },
+                }),
+                new Paragraph({
+                    text: "Option3",
+                    numbering: {
+                        reference: "my-crazy-numbering",
+                        level: 0,
+                    },
+                }),
+                new Paragraph({
+                    children: [
+                        new TextRun({
+                            text: "Some monospaced content",
+                            font: {
+                                name: "Monospace",
+                            },
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    text: "An aside, in light gray italics and indented",
+                    style: "aside",
+                }),
+                new Paragraph({
+                    text: "This is normal, but well-spaced text",
+                    style: "wellSpaced",
+                }),
+                new Paragraph({
+                    children: [
+                        new TextRun({
+                            text: "This is a bold run,",
+                            bold: true,
+                        }),
+                        new TextRun(" switching to normal "),
+                        new TextRun({
+                            text: "and then underlined ",
+                            underline: {},
+                        }),
+                        new TextRun({
+                            text: "and then emphasis-mark ",
+                            emphasisMark: {},
+                        }),
+                        new TextRun({
+                            text: "and back to normal.",
+                        }),
+                        new TextRun({
+                            text: "This text will be invisible!",
+                            vanish: true,
+                        }),
+                        new TextRun({
+                            text: "This text will be VERY invisible! Word processors cannot override this!",
+                            specVanish: true,
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    style: "Strong",
+                    children: [
+                        new TextRun({
+                            text: "Strong Style",
+                        }),
+                        new TextRun({
+                            text: " - Very strong.",
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    style: "strikeUnderline",
+                    children: [
+                        new TextRun({
+                            text: "Underline and Strike",
+                        }),
+                        new TextRun({
+                            text: " Override Underline ",
+                            underline: {
+                                type: UnderlineType.NONE,
+                            },
+                        }),
+                        new TextRun({
+                            text: "Strike and Underline",
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    children: [
+                        new TextRun({
+                            text: "Hello World ",
+                        }),
+                        new TextRun({
+                            style: "strikeUnderlineCharacter",
+                            text: "Underline and Strike",
+                        }),
+                        new TextRun({
+                            text: " Another Hello World",
+                        }),
+                        new TextRun({
+                            scale: 50,
+                            text: " Scaled text",
+                        }),
+                    ],
+                }),
+                new Paragraph({
+                    scale: 200,
+                    children: [
+                        new TextRun({
+                            text: "Scaled paragraph",
+                        }),
+                    ],
+                }),
+            ],
+        },
+    ],
+});
+
+Packer.toBuffer(doc).then((buffer) => {
+    fs.writeFileSync("My Document.docx", buffer);
+});

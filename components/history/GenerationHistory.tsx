@@ -3,7 +3,7 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/utils/supabase/client";
 import { User } from "@/types";
@@ -18,6 +18,8 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useFileViewer } from "@/context/file-viewer-context";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 
 // Define a Generation type
 interface Generation {
@@ -40,6 +42,7 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
   const router = useRouter();
   const { isCollapsed } = useSidebarStore();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const { openFile } = useFileViewer();
 
   // Fetch generations using React Query
@@ -66,16 +69,8 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
 
   // Helper function to get icon by document type
   const getDocumentIcon = (docType: string) => {
-    switch (docType) {
-      case "polycopie":
-        return "mdi:file-document-outline";
-      case "fiche":
-        return "mdi:file-outline";
-      case "examen":
-        return "mdi:file-certificate-outline";
-      default:
-        return "mdi:file-outline";
-    }
+    // Use the same icon for all document types
+    return "solar:document-bold-duotone";
   };
 
   // Helper function to get test name in French
@@ -93,6 +88,24 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
         return sousTest;
     }
   };
+
+  // Format date to just day and month
+  const formatShortDate = (dateString: string) => {
+    return format(new Date(dateString), "dd/MM", { locale: fr });
+  };
+
+  // Filter generations based on search query
+  const filteredGenerations = useMemo(() => {
+    if (!generations) return [];
+    if (!searchQuery.trim()) return generations;
+
+    const query = searchQuery.toLowerCase();
+    return generations.filter((gen) => {
+      const testName = getTestName(gen.sous_test).toLowerCase();
+      const docType = gen.document_type.toLowerCase();
+      return testName.includes(query) || docType.includes(query);
+    });
+  }, [generations, searchQuery]);
 
   // Handler for opening a file
   const handleOpenFile = async (filePath: string, id: string) => {
@@ -148,13 +161,30 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
   if (!user) return null;
 
   return (
-    <div className="space-y-2">
-      {/* History title */}
-      {!isCollapsed && (
-        <h3 className="text-sm font-medium text-foreground/60 mb-2">
-          Historique
-        </h3>
-      )}
+    <div className="flex flex-col flex-1 overflow-hidden">
+      {/* History header and search */}
+      <div className="mb-2 space-y-2">
+        {!isCollapsed && (
+          <>
+            <h3 className="text-sm font-medium text-foreground/60">
+              Historique
+            </h3>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Rechercher..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-7 text-xs w-full py-1 pr-7"
+              />
+              <Icon
+                icon="solar:magnifer-linear"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-foreground/60 h-4 w-4"
+              />
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Loading state */}
       {isLoading && (
@@ -178,59 +208,67 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
         </div>
       )}
 
-      {/* Empty state */}
-      {generations?.length === 0 && !isLoading && !isCollapsed && (
-        <div className="text-sm text-foreground/60 italic">
-          Aucune génération récente
-        </div>
+      {/* Empty state - for when there are no generations or no search results */}
+      {!isLoading && !error && (
+        <>
+          {filteredGenerations.length === 0 && !isCollapsed && (
+            <div className="text-sm text-foreground/60 italic">
+              {generations?.length === 0
+                ? "Aucune génération récente"
+                : "Aucun résultat pour cette recherche"}
+            </div>
+          )}
+        </>
       )}
 
-      {/* List of generations */}
-      {generations && generations.length > 0 && (
-        <ScrollArea className={cn("h-60", isCollapsed && "h-72")}>
-          <div className="space-y-1 pr-2">
-            {generations.map((gen) => (
-              <Button
-                key={gen.id}
-                variant="ghost"
-                className={cn(
-                  "w-full justify-start p-2 h-auto",
-                  isCollapsed ? "flex-col" : "flex"
-                )}
-                onMouseEnter={() => setHoveredId(gen.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                onClick={() => handleOpenFile(gen.file_path, gen.id)}
-              >
-                <div
+      {/* List of generations - with flex-1 to take remaining space */}
+      {!isLoading && filteredGenerations.length > 0 && (
+        <div className="flex-1 overflow-hidden relative">
+          <div className="h-full overflow-y-auto pr-2">
+            <div className="space-y-1">
+              {filteredGenerations.map((gen) => (
+                <Button
+                  key={gen.id}
+                  variant="ghost"
                   className={cn(
-                    "flex items-center",
-                    isCollapsed && "flex-col gap-1"
+                    "w-full justify-start p-2 h-auto",
+                    isCollapsed ? "justify-center" : "justify-between"
                   )}
+                  onMouseEnter={() => setHoveredId(gen.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  onClick={() => handleOpenFile(gen.file_path, gen.id)}
                 >
-                  <Icon
-                    icon={getDocumentIcon(gen.document_type)}
-                    className={cn(
-                      "text-foreground/60",
-                      isCollapsed ? "h-6 w-6" : "h-5 w-5 mr-3"
-                    )}
-                  />
-                  {!isCollapsed && (
-                    <div className="flex flex-col items-start">
-                      <span className="text-sm font-medium truncate w-32">
-                        {getTestName(gen.sous_test)}
-                      </span>
-                      <span className="text-xs text-foreground/60">
-                        {format(new Date(gen.created_at), "dd MMM yyyy", {
-                          locale: fr,
-                        })}
-                      </span>
-                    </div>
+                  {isCollapsed ? (
+                    <Icon
+                      icon={getDocumentIcon(gen.document_type)}
+                      className="h-6 w-6 text-foreground/60"
+                    />
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Icon
+                          icon={getDocumentIcon(gen.document_type)}
+                          className="h-5 w-5 text-foreground/60 flex-shrink-0"
+                        />
+                        <span className="text-sm font-medium truncate max-w-[120px]">
+                          {getTestName(gen.sous_test)}
+                        </span>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="text-xs bg-slate-100 dark:bg-slate-800 border-0 px-2 py-0 h-5"
+                      >
+                        {formatShortDate(gen.created_at)}
+                      </Badge>
+                    </>
                   )}
-                </div>
-              </Button>
-            ))}
+                </Button>
+              ))}
+            </div>
           </div>
-        </ScrollArea>
+          {/* Fade-out effect at the bottom of the list */}
+          <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-slate-50 dark:from-slate-950 to-transparent pointer-events-none"></div>
+        </div>
       )}
     </div>
   );
