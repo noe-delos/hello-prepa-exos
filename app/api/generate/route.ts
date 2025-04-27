@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { systemPrompt } from "./prompt"; // Importation du prompt système
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -13,10 +14,7 @@ const openai = new OpenAI({
 const GenerateRequestSchema = z.object({
   userId: z.string().uuid(),
   sousTest: z.enum([
-    "condMinimales",
-    "comprehension",
-    "calcul",
-    "raisonnement",
+    "calcul", // Pour l'instant, on ne gère que calcul
   ]),
   niveau: z.enum(["facile", "moyen", "difficile", "mixte"]),
   variationCount: z.number().int().min(0).max(50),
@@ -27,7 +25,7 @@ const GenerateRequestSchema = z.object({
     "correctionDetaillee",
   ]),
   questionCount: z.number().int().min(1).max(100),
-  outputFormat: z.enum(["pdf", "docx"]),
+  outputFormat: z.enum(["docx"]), // Uniquement DOCX pour l'instant
 });
 
 export async function POST(request: NextRequest) {
@@ -78,6 +76,43 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     console.log("API: Supabase admin client created successfully");
 
+    // Récupération de 20 exercices aléatoires depuis la base de données
+    console.log("API: Fetching random exercises from database");
+    const { data: randomExercises, error: fetchError } = await supabase
+      .from(`questions_${sousTest}`)
+      .select("*")
+      .limit(20)
+      .order("Question", { ascending: false });
+
+    if (fetchError) {
+      console.error("API: Error fetching exercises:", fetchError);
+      return NextResponse.json(
+        { error: "Failed to fetch exercises", details: fetchError },
+        { status: 500 }
+      );
+    }
+
+    console.log(
+      `API: Successfully fetched ${randomExercises.length} exercises`
+    );
+
+    // Prépare les exemples d'exercices pour le prompt
+    const exercisesExamples = randomExercises.map((exercise) => ({
+      question: exercise.Énoncé,
+      options: {
+        A: exercise.A,
+        B: exercise.B,
+        C: exercise.C,
+        D: exercise.D,
+        E: exercise.E,
+      },
+      answer: exercise.Réponse,
+      image:
+        exercise.Image && exercise.Image !== "EMPTY" ? exercise.Image : null,
+      theme:
+        exercise.Thème && exercise.Thème !== "EMPTY" ? exercise.Thème : null,
+    }));
+
     // Prepare distribution text for prompt
     const distributionText = `avec ${variationCount} variations et ${ineditsCount} inédits`;
 
@@ -123,9 +158,14 @@ export async function POST(request: NextRequest) {
                     pour le sous-test "${sousTest}" ${distributionText}. 
                     Fournir ces exercices ${correctionDescription}.
                     
+                    Voici ${
+                      exercisesExamples.length
+                    } exemples d'exercices du type ${sousTest} pour t'inspirer:
+                    ${JSON.stringify(exercisesExamples, null, 2)}
+                    
                     Pour chaque exercice, inclure :
-                    1. Une question claire
-                    2. Des options à choix multiples si applicable
+                    1. Une question claire sous forme de texte
+                    2. Des options à choix multiples (A, B, C, D, E)
                     3. La réponse correcte ${
                       correctionType !== "sansCorrection"
                         ? "avec explication"
@@ -135,21 +175,20 @@ export async function POST(request: NextRequest) {
                     Retourner le contenu dans un format JSON structuré avec ces champs :
                     - title: Un titre pour le document
                     - introduction: Texte d'introduction bref
-                    - exercises: Tableau d'objets exercice avec question, options, réponse ${
+                    - exercises: Tableau d'objets exercice avec question (string), options, réponse ${
                       correctionType !== "sansCorrection"
                         ? "et explication"
                         : ""
                     }
                     - conclusion: Texte de conclusion bref`;
 
-    console.log("API: Calling OpenAI with prompt:", prompt);
+    console.log("API: Calling OpenAI with prompt");
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "o3-mini", // Modèle o3 comme demandé
       messages: [
         {
           role: "system",
-          content:
-            "Vous êtes un expert en éducation spécialisé dans la création d'exercices pédagogiques en français.",
+          content: systemPrompt, // Utilisation du prompt système
         },
         { role: "user", content: prompt },
       ],
@@ -157,14 +196,58 @@ export async function POST(request: NextRequest) {
     });
     console.log("API: OpenAI response received successfully");
 
+    let generatedContent;
     try {
-      const generatedContent = JSON.parse(
+      generatedContent = JSON.parse(
         completion.choices[0].message.content || "{}"
       );
-      console.log(
-        "API: Parsed generated content successfully",
-        generatedContent
-      );
+      console.log("API: Parsed generated content successfully");
+
+      // Vérifier et normaliser les données si nécessaire
+      if (
+        generatedContent.exercises &&
+        Array.isArray(generatedContent.exercises)
+      ) {
+        generatedContent.exercises = generatedContent.exercises.map(
+          (exercise: any, _index: number) => {
+            // S'assurer que la question est une chaîne
+            if (typeof exercise.question !== "string") {
+              exercise.question = String(exercise.question);
+            }
+
+            // S'assurer que toutes les options sont présentes et sont des chaînes
+            if (!exercise.options) {
+              exercise.options = { A: "", B: "", C: "", D: "", E: "" };
+            } else {
+              ["A", "B", "C", "D", "E"].forEach((option) => {
+                if (!exercise.options[option]) {
+                  exercise.options[option] = "";
+                } else if (typeof exercise.options[option] !== "string") {
+                  exercise.options[option] = String(exercise.options[option]);
+                }
+              });
+            }
+
+            // S'assurer que la réponse est une chaîne
+            if (!exercise.answer) {
+              exercise.answer = "";
+            } else if (typeof exercise.answer !== "string") {
+              exercise.answer = String(exercise.answer);
+            }
+
+            return exercise;
+          }
+        );
+      }
+
+      // S'assurer que tous les champs requis sont présents
+      if (!generatedContent.title)
+        generatedContent.title = `Exercices de Calcul TAGE MAGE - ${niveau}`;
+      if (!generatedContent.introduction)
+        generatedContent.introduction =
+          "Voici une série d'exercices pour vous préparer à la section Calcul du TAGE MAGE.";
+      if (!generatedContent.conclusion)
+        generatedContent.conclusion = "Fin des exercices. Bonne préparation !";
     } catch (parseError) {
       console.error("API: Error parsing OpenAI response:", parseError);
       console.log(
@@ -174,78 +257,39 @@ export async function POST(request: NextRequest) {
       throw new Error("Failed to parse OpenAI response");
     }
 
-    const generatedContent = JSON.parse(
-      completion.choices[0].message.content || "{}"
-    );
+    // Generate DOCX document
+    console.log("API: Generating DOCX document");
+    const docxEndpoint = `${request.nextUrl.origin}/api/generate/docx`;
+    console.log("API: Calling DOCX endpoint:", docxEndpoint);
 
-    // Generate document based on output format
-    let documentUrl;
-    let fileId;
-    if (outputFormat === "pdf") {
-      console.log("API: Generating PDF document");
-      const pdfEndpoint = `${request.nextUrl.origin}/api/generate/pdf`;
-      console.log("API: Calling PDF endpoint:", pdfEndpoint);
+    const docxPayload = {
+      userId,
+      content: generatedContent,
+      title: `${sousTest}_${niveau}_${questionCount}_questions`,
+      randomExercises, // Passons également les exercices aléatoires pour être utilisés dans la génération du document
+    };
+    console.log("API: DOCX request payload prepared");
 
-      const pdfPayload = {
-        userId,
-        content: generatedContent,
-        title: `${sousTest}_${niveau}_${questionCount}_questions`,
-      };
-      console.log("API: PDF request payload:", JSON.stringify(pdfPayload));
+    const response = await fetch(docxEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(docxPayload),
+    });
 
-      const response = await fetch(pdfEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(pdfPayload),
-      });
+    console.log("API: DOCX generation response status:", response.status);
 
-      console.log("API: PDF generation response status:", response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("API: Failed to generate PDF. Response:", errorText);
-        throw new Error(`Failed to generate PDF: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log("API: PDF generated successfully:", result);
-      documentUrl = result.url;
-      fileId = result.id;
-    } else {
-      console.log("API: Generating DOCX document");
-      const docxEndpoint = `${request.nextUrl.origin}/api/generate/docx`;
-      console.log("API: Calling DOCX endpoint:", docxEndpoint);
-
-      const docxPayload = {
-        userId,
-        content: generatedContent,
-        title: `${sousTest}_${niveau}_${questionCount}_questions`,
-      };
-      console.log("API: DOCX request payload:", JSON.stringify(docxPayload));
-
-      const response = await fetch(docxEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(docxPayload),
-      });
-
-      console.log("API: DOCX generation response status:", response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("API: Failed to generate DOCX. Response:", errorText);
-        throw new Error(`Failed to generate DOCX: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log("API: DOCX generated successfully:", result);
-      documentUrl = result.url;
-      fileId = result.id;
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("API: Failed to generate DOCX. Response:", errorText);
+      throw new Error(`Failed to generate DOCX: ${errorText}`);
     }
+
+    const result = await response.json();
+    console.log("API: DOCX generated successfully:", result);
+    const documentUrl = result.url;
+    const fileId = result.id;
 
     // Save to generations table using the original schema structure
     console.log("API: Saving generation to database:", {

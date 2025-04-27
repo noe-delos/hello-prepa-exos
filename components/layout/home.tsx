@@ -35,12 +35,12 @@ export default function QuestionGenerator({ user }: any) {
 
   // State for form values
   const [formState, setFormState] = useState({
-    sousTest: "condMinimales",
+    sousTest: "calcul", // Changé de "condMinimales" à "calcul"
     niveau: "difficile",
     variationCount: 10,
     ineditsCount: 10,
     correctionType: "sansCorrection",
-    outputFormat: "pdf",
+    outputFormat: "docx", // Changé de "pdf" à "docx"
   });
 
   // Calculated total question count
@@ -197,6 +197,7 @@ export default function QuestionGenerator({ user }: any) {
                     isPanelOpen ? "grid grid-cols-2 gap-2" : "space-y-3"
                   )}
                 >
+                  {/* Seule l'option Calcul est active pour l'instant */}
                   <div className="flex items-center gap-3">
                     <div
                       className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
@@ -210,6 +211,7 @@ export default function QuestionGenerator({ user }: any) {
                         className="sr-only"
                         checked={formState.sousTest === "comprehension"}
                         onChange={() => {}}
+                        disabled
                       />
                       <div
                         className={cn(
@@ -222,9 +224,12 @@ export default function QuestionGenerator({ user }: any) {
                     </div>
                     <label
                       htmlFor="comprehension"
-                      onClick={() => handleSousTestChange("comprehension")}
+                      className="cursor-not-allowed opacity-50"
                     >
                       Compréhension
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        Bientôt disponible
+                      </Badge>
                     </label>
                   </div>
                   <div className="flex items-center gap-3">
@@ -268,6 +273,7 @@ export default function QuestionGenerator({ user }: any) {
                         className="sr-only"
                         checked={formState.sousTest === "raisonnement"}
                         onChange={() => {}}
+                        disabled
                       />
                       <div
                         className={cn(
@@ -280,9 +286,12 @@ export default function QuestionGenerator({ user }: any) {
                     </div>
                     <label
                       htmlFor="raisonnement"
-                      onClick={() => handleSousTestChange("raisonnement")}
+                      className="cursor-not-allowed opacity-50"
                     >
                       Raisonnement
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        Bientôt disponible
+                      </Badge>
                     </label>
                   </div>
                   <div className="flex items-center gap-3">
@@ -298,6 +307,7 @@ export default function QuestionGenerator({ user }: any) {
                         className="sr-only"
                         checked={formState.sousTest === "condMinimales"}
                         onChange={() => {}}
+                        disabled
                       />
                       <div
                         className={cn(
@@ -310,48 +320,13 @@ export default function QuestionGenerator({ user }: any) {
                     </div>
                     <label
                       htmlFor="condMinimales"
-                      onClick={() => handleSousTestChange("condMinimales")}
+                      className="cursor-not-allowed opacity-50"
                     >
                       Cond. Minimales
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        Bientôt disponible
+                      </Badge>
                     </label>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-not-allowed opacity-50">
-                      <input
-                        type="radio"
-                        id="expression"
-                        name="sous-test"
-                        value="expression"
-                        className="sr-only"
-                        disabled
-                      />
-                      <div className="h-3 w-3 rounded-full"></div>
-                    </div>
-                    <span className="flex items-center">
-                      Expression
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        Bientôt disponible
-                      </Badge>
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-not-allowed opacity-50">
-                      <input
-                        type="radio"
-                        id="logique"
-                        name="sous-test"
-                        value="logique"
-                        className="sr-only"
-                        disabled
-                      />
-                      <div className="h-3 w-3 rounded-full"></div>
-                    </div>
-                    <span className="flex items-center">
-                      Logique
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        Bientôt disponible
-                      </Badge>
-                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -618,7 +593,8 @@ export default function QuestionGenerator({ user }: any) {
                       <SelectValue placeholder="Format de sortie" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pdf">PDF</SelectItem>
+                      {/* Désactivation temporaire du PDF */}
+                      {/* <SelectItem value="pdf">PDF</SelectItem> */}
                       <SelectItem value="docx">DOCX</SelectItem>
                     </SelectContent>
                   </Select>

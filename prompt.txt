@@ -1,0 +1,42 @@
+Salut Claude ! Aujourd'hui on a du pain sur la planche !
+
+Tu va m'aider à terminer mon projet de génération d'exercises par iA. Pour résumer voici l'objectif connecter une génération de LLM o3 d'openAI avec une base de donnée postgre supabase pour obtenir des données à lui fournir + un préprompt système et enfin une génération de fichier docx avec un format spécifié. 
+
+Il y a plusieurs catégories d'exercises et le prof peut en générer qu'un type d'exos à la fois ainsi que d'autres paramètres. 
+
+Je vais te fournir les éléments suivants : 
+
+Mon layout avec tous les bons paramètres
+
+la structure de ma table (chaque catégories d'exos a sa table), pour l'instant tu les disable toutes sauf la calcul (c'est la seule que j'ai terminée pour l'instant (elles ont toutes la même structure )
+
+le code du formattage de fichier DOCX en utilisant la libraire docx npm (tu devrai un peu la modifier pour boucler sur les questions avec les vrais valeurs, le reste du fichier doit être formatté exactement comme sur l'exemple
+
+Mon premier code de ma route next de génération (que tu modifiera au besoin)
+
+un screenshot des données pour te montrer ça ressemble à quoi
+
+Disable la version PDF pour l'instant, on la fera plus tard
+
+le prompt système que tu peux adapter si besoin mais normalement il est bon sur la base pour prendre les variables en compte
+
+remarques : 
+
+Fait en sorte que plus tard je n'aurai plus qu'à créer les tables des autres types d'exercises et enable le radio pour tous les avoir. 
+
+Dans la base de donnée tu devrai prendre des exercises aléatoirs. Prends en 20. (que tu donnera au prompt)
+
+les images sont enregistrées en string au format base64 dans la table, Donc si et seulement si il y en a tu les mets en dessous de l'énoncé en utilisant une image base64 avec npm docx 
+
+ne t'occupe pas du thème pour l'instant (ce sera pour plus tard)
+
+En retour tu me donnera : 
+
+Le fichier layout 
+
+La route de génération
+
+La route de génération du docx
+
+le fichier du prompt
+
