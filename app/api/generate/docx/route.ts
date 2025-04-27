@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 // src/app/api/generate/docx/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import * as docx from "docx";
