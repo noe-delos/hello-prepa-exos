@@ -19,7 +19,7 @@ export default function RootLayout({
       <body className={musticaFont.className}>
         <ReactQueryProvider>
           <div className="min-h-screen bg-background flex">
-            <Toaster position="top-right" richColors />
+            <Toaster position="top-center" richColors />
             {children}
           </div>
         </ReactQueryProvider>

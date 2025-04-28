@@ -191,9 +191,7 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
 
         router.push("/accueil");
       } else {
-        // If we're already on accueil, open the file directly
         openFile(filePath, generation.output_format, fileName);
-        toast.success("Document chargé");
       }
     } catch (error) {
       console.error("Error opening file:", error);

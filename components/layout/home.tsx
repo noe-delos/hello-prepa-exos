@@ -23,6 +23,30 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFileViewer } from "@/context/file-viewer-context";
+import ShimmeringTitle from "../ui/animated-shiny-text";
+
+// Custom loading toast component
+const GenerationProgressToast = ({ questionCount }: any) => {
+  // Calculate estimated time (approx 7 seconds per exercise)
+  const estimatedTimeSeconds = questionCount * 7;
+  const estimatedMinutes = Math.ceil(estimatedTimeSeconds / 60);
+
+  return (
+    <div className="relative flex w-full min-w-[27rem] shadow-md cursor-default items-center gap-3 rounded-xl border border-border bg-background p-4 pl-1">
+      <div className="item flex flex-1 flex-col items-start justify-start gap-0 pl-4">
+        <p className="max-w-sm truncate text-sm font-medium text-gray-900">
+          Génération des exercices
+        </p>
+        <div className="h-fit text-sm text-gray-500">
+          <ShimmeringTitle className="self-left z-0 flex h-fit cursor-default flex-row items-center text-foreground/80">
+            Cette opération peut prendre plusieurs minutes (est~{" "}
+            {estimatedMinutes}m)
+          </ShimmeringTitle>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function QuestionGenerator({ user }: any) {
   const router = useRouter();
@@ -80,8 +104,11 @@ export default function QuestionGenerator({ user }: any) {
     // Start loading state
     setIsGenerating(true);
 
-    // Show loading toast
-    const toastId = toast.loading("Génération du document en cours...");
+    // Show custom loading toast with the shimmer effect
+    const toastId = toast.custom(
+      () => <GenerationProgressToast questionCount={totalQuestionCount} />,
+      { id: "generation-progress", duration: Infinity }
+    );
 
     try {
       // Call generate API with user ID
@@ -111,9 +138,11 @@ export default function QuestionGenerator({ user }: any) {
 
       const data = await response.json();
 
+      // Dismiss the custom toast
+      toast.dismiss("generation-progress");
+
       // Success toast
       toast.success("Document généré avec succès!", {
-        id: toastId,
         description:
           "Vous pouvez télécharger le document ou le consulter dans votre historique.",
         action: {
@@ -127,9 +156,11 @@ export default function QuestionGenerator({ user }: any) {
     } catch (error) {
       console.error("Generation error:", error);
 
+      // Dismiss the custom toast
+      toast.dismiss("generation-progress");
+
       // Error toast
       toast.error("Erreur lors de la génération", {
-        id: toastId,
         description:
           error instanceof Error ? error.message : "Une erreur est survenue",
       });
