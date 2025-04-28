@@ -143,8 +143,7 @@ export default function QuestionGenerator({ user }: any) {
 
       // Success toast
       toast.success("Document généré avec succès!", {
-        description:
-          "Vous pouvez télécharger le document ou le consulter dans votre historique.",
+        description: "Vous pouvez télécharger le document.",
         action: {
           label: "Télécharger",
           onClick: () => window.open(data.url, "_blank"),
