@@ -17,7 +17,10 @@ const openai = new OpenAI({
 const GenerateRequestSchema = z.object({
   userId: z.string().uuid(),
   sousTest: z.enum([
-    "calcul", // Pour l'instant, on ne gère que calcul
+    "calcul",
+    "comprehension",
+    "raisonnement",
+    "condMinimales",
   ]),
   niveau: z.enum(["facile", "moyen", "difficile", "mixte"]),
   variationCount: z.number().int().min(0).max(50),
@@ -158,32 +161,38 @@ export async function POST(request: NextRequest) {
     const prompt = `Générer ${questionCount} exercices ${
       niveau === "mixte" ? "de niveaux variés" : `de niveau ${niveau}`
     } 
-                    pour le sous-test "${sousTest}" ${distributionText}. 
-                    Fournir ces exercices ${correctionDescription}.
-                    
-                    Voici ${
-                      exercisesExamples.length
-                    } exemples d'exercices du type ${sousTest} pour t'inspirer:
-                    ${JSON.stringify(exercisesExamples, null, 2)}
-                    
-                    Pour chaque exercice, inclure :
-                    1. Une question claire sous forme de texte
-                    2. Des options à choix multiples (A, B, C, D, E)
-                    3. La réponse correcte ${
-                      correctionType !== "sansCorrection"
-                        ? "avec explication"
-                        : ""
-                    }
-                    
-                    Retourner le contenu dans un format JSON structuré avec ces champs :
-                    - title: Un titre pour le document
-                    - introduction: Texte d'introduction bref
-                    - exercises: Tableau d'objets exercice avec question (string), options, réponse ${
-                      correctionType !== "sansCorrection"
-                        ? "et explication"
-                        : ""
-                    }
-                    - conclusion: Texte de conclusion bref`;
+pour le sous-test "${sousTest}" ${distributionText}. 
+Fournir ces exercices ${correctionDescription}.
+
+Voici ${
+      exercisesExamples.length
+    } exemples d'exercices du type ${sousTest} pour t'inspirer:
+${JSON.stringify(exercisesExamples, null, 2)}
+
+Pour chaque exercice, inclure :
+1. Une question claire sous forme de texte. 
+   IMPORTANT: La question doit être directe et concise, sans mentions comme "Variation X" ou "Exercice X".
+2. Des options à choix multiples (A, B, C, D, E)
+3. La réponse correcte (lettre A, B, C, D ou E)
+${
+  correctionType !== "sansCorrection"
+    ? correctionType === "correctionCourte"
+      ? "4. Une courte explication (shortExplanation) qui indique brièvement la méthode de résolution"
+      : "4. Une explication détaillée (explanation) qui donne la solution complète pas à pas"
+    : ""
+}
+
+Retourner le contenu dans un format JSON structuré avec ces champs :
+- title: Un titre pour le document
+- introduction: Texte d'introduction bref
+- exercises: Tableau d'objets exercice avec question (string), options, réponse ${
+      correctionType !== "sansCorrection"
+        ? correctionType === "correctionCourte"
+          ? "et shortExplanation"
+          : "et explanation"
+        : ""
+    }
+- conclusion: Texte de conclusion bref`;
 
     console.log("API: Calling OpenAI with prompt");
     const completion = await openai.chat.completions.create({
@@ -218,6 +227,11 @@ export async function POST(request: NextRequest) {
               exercise.question = String(exercise.question);
             }
 
+            // Nettoyer la question pour enlever les mentions inutiles
+            exercise.question = exercise.question
+              .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
+              .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
+
             // S'assurer que toutes les options sont présentes et sont des chaînes
             if (!exercise.options) {
               exercise.options = { A: "", B: "", C: "", D: "", E: "" };
@@ -245,10 +259,9 @@ export async function POST(request: NextRequest) {
 
       // S'assurer que tous les champs requis sont présents
       if (!generatedContent.title)
-        generatedContent.title = `Exercices de Calcul TAGE MAGE - ${niveau}`;
+        generatedContent.title = `Exercices de ${sousTest} TAGE MAGE - ${niveau}`;
       if (!generatedContent.introduction)
-        generatedContent.introduction =
-          "Voici une série d'exercices pour vous préparer à la section Calcul du TAGE MAGE.";
+        generatedContent.introduction = `Voici une série d'exercices pour vous préparer à la section ${sousTest} du TAGE MAGE.`;
       if (!generatedContent.conclusion)
         generatedContent.conclusion = "Fin des exercices. Bonne préparation !";
     } catch (parseError) {
@@ -269,7 +282,8 @@ export async function POST(request: NextRequest) {
       userId,
       content: generatedContent,
       title: `${sousTest}_${niveau}_${questionCount}_questions`,
-      randomExercises, // Passons également les exercices aléatoires pour être utilisés dans la génération du document
+      correctionType, // Pass the correction type to the DOCX generator
+      randomExercises,
     };
     console.log("API: DOCX request payload prepared");
 

@@ -32,7 +32,7 @@ const GenerationProgressToast = ({ questionCount }: any) => {
   const estimatedMinutes = Math.ceil(estimatedTimeSeconds / 60);
 
   return (
-    <div className="relative flex w-full min-w-[27rem] shadow-md cursor-default items-center gap-3 rounded-xl border border-border bg-background p-4 pl-1">
+    <div className="relative flex w-full min-w-[27rem] shadow-sm cursor-default items-center gap-3 rounded-xl border border-border bg-background p-4 pl-1">
       <div className="item flex flex-1 flex-col items-start justify-start gap-0 pl-4">
         <p className="max-w-sm truncate text-sm font-medium text-gray-900">
           Génération des exercices
@@ -143,7 +143,7 @@ export default function QuestionGenerator({ user }: any) {
 
       // Success toast
       toast.success("Document généré avec succès!", {
-        description: "Vous pouvez télécharger le document.",
+        description: "Vous pouvez télécharger le document.  ",
         action: {
           label: "Télécharger",
           onClick: () => window.open(data.url, "_blank"),

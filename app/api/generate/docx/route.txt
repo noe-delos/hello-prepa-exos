@@ -31,15 +31,11 @@ const DocxRequestSchema = z.object({
           .transform((val) => String(val))
           .optional(),
         explanation: z.string().optional(),
-        shortExplanation: z.string().optional(),
       })
     ),
     conclusion: z.string(),
   }),
   title: z.string(),
-  correctionType: z
-    .enum(["sansCorrection", "correctionCourte", "correctionDetaillee"])
-    .default("sansCorrection"),
   randomExercises: z.array(z.any()).optional(),
 });
 
@@ -64,8 +60,6 @@ export async function POST(request: NextRequest) {
       requestBody.userId,
       "title:",
       requestBody.title,
-      "correctionType:",
-      requestBody.correctionType,
       "content keys:",
       Object.keys(requestBody.content || {}),
       "exercises count:",
@@ -84,14 +78,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const {
-      userId,
-      content,
-      title,
-      correctionType = "sansCorrection",
-    } = validationResult.data;
+    const { userId, content, title } = validationResult.data;
     console.log(
-      `DOCX API: Processing document for user ${userId} with title ${title} and correction type ${correctionType}`
+      `DOCX API: Processing document for user ${userId} with title ${title}`
     );
 
     // Vérifier et nettoyer les données
@@ -109,11 +98,8 @@ export async function POST(request: NextRequest) {
         E: String(exercise.options.E || ""),
       };
 
-      // S'assurer que la question est une chaîne et nettoyer les mentions inutiles
+      // S'assurer que la question est une chaîne
       exercise.question = String(exercise.question || `Question ${index + 1}`);
-      exercise.question = exercise.question
-        .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
-        .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
 
       // S'assurer que la réponse est une chaîne
       if (exercise.answer) {
@@ -125,12 +111,7 @@ export async function POST(request: NextRequest) {
 
     // Générer le document DOCX
     console.log("DOCX API: Generating document");
-    const doc = generateDocument(
-      content,
-      logoBase64,
-      watermarkBase64,
-      correctionType
-    );
+    const doc = generateDocument(content, logoBase64, watermarkBase64);
 
     // Créer le buffer pour le document
     console.log("DOCX API: Creating document buffer");
@@ -206,8 +187,7 @@ export async function POST(request: NextRequest) {
 function generateDocument(
   content: any,
   logoBase64: string,
-  watermarkBase64: string,
-  correctionType = "sansCorrection"
+  watermarkBase64: string
 ) {
   try {
     console.log("DOCX API: Starting document generation");
@@ -696,10 +676,7 @@ function generateDocument(
               ],
             }),
           },
-          children: generateQuestionParagraphs(
-            content.exercises,
-            correctionType
-          ),
+          children: generateQuestionParagraphs(content.exercises),
         },
       ],
     });
@@ -714,13 +691,10 @@ function generateDocument(
 }
 
 // Fonction pour générer les paragraphes de questions
-function generateQuestionParagraphs(
-  exercises: any,
-  correctionType = "sansCorrection"
-) {
+function generateQuestionParagraphs(exercises: any) {
   try {
     console.log("DOCX API: Generating question paragraphs");
-    const children: any[] = [];
+    const children = [];
 
     // Log des informations sur les exercices
     console.log(`DOCX API: Processing ${exercises.length} exercises`);
@@ -798,89 +772,66 @@ function generateQuestionParagraphs(
       ];
 
       options.forEach((option, optIndex) => {
-        // Only bold the correct option if correction is requested
-        const isCorrectOption = exercise.answer === option.letter;
-        const shouldBeBold =
-          correctionType !== "sansCorrection" && isCorrectOption;
-
         children.push(
           new docx.Paragraph({
             spacing: {
               before: optIndex === 0 ? 200 : 0, // Space before first option
-              after: optIndex === options.length - 1 ? 200 : 0, // Less space after last option
+              after: optIndex === options.length - 1 ? 600 : 0, // Space after last option
             },
             children: [
               new docx.TextRun({
                 text: `(${option.letter}) ${option.text}`,
                 font: "Calibri",
-                bold: shouldBeBold,
+                bold: exercise.answer === option.letter, // Bold if it's the correct answer
               }),
             ],
           })
         );
       });
 
-      // Add explanation if correction is requested
-      if (correctionType !== "sansCorrection") {
-        // For short correction, show a brief explanation
-        if (
-          correctionType === "correctionCourte" &&
-          exercise.shortExplanation
-        ) {
-          children.push(
-            new docx.Paragraph({
-              spacing: {
-                before: 200,
-                after: 400,
-              },
-              children: [
-                new docx.TextRun({
-                  text: "Explication: ",
-                  bold: true,
-                  font: "Calibri",
-                }),
-                new docx.TextRun({
-                  text: `${exercise.answer}. ${exercise.shortExplanation}`,
-                  font: "Calibri",
-                }),
-              ],
-            })
-          );
-        }
-        // For detailed correction, show the full explanation
-        else if (
-          correctionType === "correctionDetaillee" &&
-          exercise.explanation
-        ) {
-          children.push(
-            new docx.Paragraph({
-              spacing: {
-                before: 200,
-                after: 400,
-              },
-              children: [
-                new docx.TextRun({
-                  text: "Explication: ",
-                  bold: true,
-                  font: "Calibri",
-                }),
-                new docx.TextRun({
-                  text: exercise.explanation,
-                  font: "Calibri",
-                }),
-              ],
-            })
-          );
-        }
+      // Add explanation if present
+      if (exercise.explanation) {
+        children.push(
+          new docx.Paragraph({
+            spacing: {
+              before: 200,
+              after: 400,
+            },
+            children: [
+              new docx.TextRun({
+                text: "Explication: ",
+                bold: true,
+                font: "Calibri",
+              }),
+              new docx.TextRun({
+                text: exercise.explanation,
+                font: "Calibri",
+              }),
+            ],
+          })
+        );
       }
 
-      // Add only one empty space after each question to avoid extra blank pages
-      console.log("@@@@@@@", index, index % 4 === 0);
+      // Add some empty space after each question
       children.push(new docx.Paragraph({ text: "" }));
       children.push(new docx.Paragraph({ text: "" }));
     });
 
-    // No extra paragraphs at the end to avoid blank pages
+    // Conclusion paragraph
+    children.push(
+      new docx.Paragraph({
+        spacing: {
+          before: 400,
+        },
+        children: [
+          new docx.TextRun({
+            text: "",
+            font: "Calibri",
+          }),
+        ],
+      })
+    );
+
     console.log("DOCX API: Question paragraphs generation completed");
     return children;
   } catch (error) {
