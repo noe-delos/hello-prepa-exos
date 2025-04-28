@@ -8,6 +8,8 @@ import { Packer } from "docx";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 
+export const maxDuration = 60;
+
 // Schéma de validation pour la requête
 const DocxRequestSchema = z.object({
   userId: z.string().uuid(),

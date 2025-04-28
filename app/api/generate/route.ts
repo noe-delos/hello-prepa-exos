@@ -8,6 +8,8 @@ import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { systemPrompt } from "./prompt"; // Importation du prompt système
 
+export const maxDuration = 60;
+
 // Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
