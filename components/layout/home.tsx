@@ -24,6 +24,9 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFileViewer } from "@/context/file-viewer-context";
 import ShimmeringTitle from "../ui/animated-shiny-text";
+import confetti from "canvas-confetti";
+import { Icon } from "@iconify/react";
+import { revalidateHistoryList } from "@/actions/list";
 
 // Custom loading toast component
 const GenerationProgressToast = ({ questionCount }: any) => {
@@ -46,6 +49,38 @@ const GenerationProgressToast = ({ questionCount }: any) => {
       </div>
     </div>
   );
+};
+
+// Function to trigger confetti on success
+const triggerConfetti = () => {
+  const end = Date.now() + 1 * 1000; // 1.5 seconds
+  const colors = ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1"];
+
+  const frame = () => {
+    if (Date.now() > end) return;
+
+    confetti({
+      particleCount: 2,
+      angle: 60,
+      spread: 55,
+      startVelocity: 60,
+      origin: { x: 0, y: 0.5 },
+      colors: colors,
+    });
+
+    confetti({
+      particleCount: 2,
+      angle: 120,
+      spread: 55,
+      startVelocity: 60,
+      origin: { x: 1, y: 0.5 },
+      colors: colors,
+    });
+
+    requestAnimationFrame(frame);
+  };
+
+  frame();
 };
 
 export default function QuestionGenerator({ user }: any) {
@@ -141,17 +176,23 @@ export default function QuestionGenerator({ user }: any) {
       // Dismiss the custom toast
       toast.dismiss("generation-progress");
 
-      // Success toast
+      // Trigger confetti effect
+      triggerConfetti();
+
+      // Success toast with circular download button
       toast.success("Document généré avec succès!", {
-        description: "Vous pouvez télécharger le document.  ",
+        description: "Vous pouvez télécharger le document.",
         action: {
-          label: "Télécharger",
+          label: "",
           onClick: () => window.open(data.url, "_blank"),
         },
       });
 
       // Invalidate the generations query to refresh the sidebar
       queryClient.invalidateQueries({ queryKey: ["generations"] });
+
+      // Force revalidate the path to ensure UI updates
+      await revalidateHistoryList();
     } catch (error) {
       console.error("Generation error:", error);
 

@@ -3,7 +3,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/utils/supabase/client";
 import { User } from "@/types";
@@ -31,6 +31,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { ShinyButton } from "@/components/ui/shiny-button"; // Import the shiny button component
+import { revalidateHistoryList } from "@/actions/list";
+import { motion } from "framer-motion"; // Import framer-motion
 
 // Define a Generation type
 interface Generation {
@@ -56,6 +59,10 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const { openFile } = useFileViewer();
+  const [latestGenerationId, setLatestGenerationId] = useState<string | null>(
+    null
+  );
+  const previousGenerationsRef = useRef<Generation[]>([]);
 
   // Filter categories
   const filterCategories = [
@@ -86,6 +93,37 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
     },
     enabled: !!user,
   });
+
+  // Detect new generation entries
+  useEffect(() => {
+    if (!generations || !previousGenerationsRef.current.length) {
+      previousGenerationsRef.current = generations || [];
+      return;
+    }
+
+    // Find new generations that weren't in the previous list
+    if (generations.length > 0 && previousGenerationsRef.current.length > 0) {
+      const previousIds = new Set(
+        previousGenerationsRef.current.map((gen) => gen.id)
+      );
+      const newGeneration = generations.find((gen) => !previousIds.has(gen.id));
+
+      if (newGeneration) {
+        // Force a revalidation to ensure the UI is up-to-date
+        revalidateHistoryList();
+
+        setLatestGenerationId(newGeneration.id);
+
+        // Clear the latest generation ID after 1.5 seconds
+        setTimeout(() => {
+          setLatestGenerationId(null);
+        }, 1500);
+      }
+    }
+
+    // Update the reference
+    previousGenerationsRef.current = generations || [];
+  }, [generations]);
 
   // Helper function to get icon by document type
   const getDocumentIcon = (docType: string) => {
@@ -202,6 +240,30 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
   // Check if any filters are active
   const hasActiveFilters =
     activeFilters.length > 0 || selectedDate !== undefined;
+
+  // Animation variants for list items
+  const listVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.08,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        type: "spring",
+        stiffness: 260,
+        damping: 20,
+      },
+    },
+  };
 
   if (!user) return null;
 
@@ -323,46 +385,93 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
       {!isLoading && filteredGenerations.length > 0 && (
         <div className="flex-1 overflow-hidden relative">
           <div className="h-full overflow-y-auto pr-2">
-            <div className="space-y-1">
-              {filteredGenerations.map((gen) => (
-                <Button
-                  key={gen.id}
-                  variant="ghost"
-                  className={cn(
-                    "w-full justify-start p-2 h-auto",
-                    isCollapsed ? "justify-center" : "justify-between"
-                  )}
-                  onMouseEnter={() => setHoveredId(gen.id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  onClick={() => handleOpenFile(gen.file_path, gen.id)}
-                >
-                  {isCollapsed ? (
-                    <Icon
-                      icon={getDocumentIcon(gen.document_type)}
-                      className="h-6 w-6 text-foreground/60"
-                    />
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-2">
+            <motion.div
+              className="space-y-1"
+              variants={listVariants}
+              initial="hidden"
+              animate="show"
+            >
+              {filteredGenerations.map((gen) => {
+                const isLatestGeneration = gen.id === latestGenerationId;
+
+                // For non-collapsed view and latest generation, render with ShinyButton
+                if (!isCollapsed && isLatestGeneration) {
+                  return (
+                    <motion.div key={gen.id} variants={itemVariants} layout>
+                      <ShinyButton
+                        className={cn(
+                          "w-full justify-start p-2 h-auto",
+                          "justify-between"
+                        )}
+                        onMouseEnter={() => setHoveredId(gen.id)}
+                        onMouseLeave={() => setHoveredId(null)}
+                        onClick={() => handleOpenFile(gen.file_path, gen.id)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon
+                            icon={getDocumentIcon(gen.document_type)}
+                            className="h-5 w-5 text-foreground/60 flex-shrink-0"
+                          />
+                          <span className="text-sm font-medium truncate max-w-[120px] capitalize">
+                            {getTestName(gen.sous_test)}
+                          </span>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-xs bg-slate-100 dark:bg-slate-800 border-0 px-2 py-0 h-5"
+                        >
+                          {formatShortDate(gen.created_at)}
+                        </Badge>
+                      </ShinyButton>
+                    </motion.div>
+                  );
+                }
+
+                // Default button for all other cases
+                return (
+                  <motion.div key={gen.id} variants={itemVariants} layout>
+                    <Button
+                      variant="ghost"
+                      className={cn(
+                        "w-full justify-start p-2 h-auto",
+                        isCollapsed ? "justify-center" : "justify-between",
+                        isLatestGeneration && isCollapsed
+                          ? "border border-primary"
+                          : ""
+                      )}
+                      onMouseEnter={() => setHoveredId(gen.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                      onClick={() => handleOpenFile(gen.file_path, gen.id)}
+                    >
+                      {isCollapsed ? (
                         <Icon
                           icon={getDocumentIcon(gen.document_type)}
-                          className="h-5 w-5 text-foreground/60 flex-shrink-0"
+                          className="h-6 w-6 text-foreground/60"
                         />
-                        <span className="text-sm font-medium truncate max-w-[120px]">
-                          {getTestName(gen.sous_test)}
-                        </span>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className="text-xs bg-slate-100 dark:bg-slate-800 border-0 px-2 py-0 h-5"
-                      >
-                        {formatShortDate(gen.created_at)}
-                      </Badge>
-                    </>
-                  )}
-                </Button>
-              ))}
-            </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Icon
+                              icon={getDocumentIcon(gen.document_type)}
+                              className="h-5 w-5 text-foreground/60 flex-shrink-0"
+                            />
+                            <span className="text-sm font-medium truncate max-w-[120px]">
+                              {getTestName(gen.sous_test)}
+                            </span>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="text-xs bg-slate-100 dark:bg-slate-800 border-0 px-2 py-0 h-5"
+                          >
+                            {formatShortDate(gen.created_at)}
+                          </Badge>
+                        </>
+                      )}
+                    </Button>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
           </div>
         </div>
       )}

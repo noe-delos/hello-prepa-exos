@@ -878,6 +878,7 @@ function generateQuestionParagraphs(
       console.log("@@@@@@@", index, index % 4 === 0);
       children.push(new docx.Paragraph({ text: "" }));
       children.push(new docx.Paragraph({ text: "" }));
+      children.push(new docx.Paragraph({ text: "" }));
     });
 
     // No extra paragraphs at the end to avoid blank pages
