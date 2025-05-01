@@ -117,7 +117,7 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
         // Clear the latest generation ID after 1.5 seconds
         setTimeout(() => {
           setLatestGenerationId(null);
-        }, 1500);
+        }, 4500);
       }
     }
 
