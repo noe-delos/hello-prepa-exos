@@ -117,7 +117,7 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
         // Clear the latest generation ID after 1.5 seconds
         setTimeout(() => {
           setLatestGenerationId(null);
-        }, 4500);
+        }, 6500);
       }
     }
 
@@ -372,7 +372,7 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
       {!isLoading && !error && (
         <>
           {filteredGenerations.length === 0 && !isCollapsed && (
-            <div className="text-sm text-foreground/60 italic">
+            <div className="text-xs text-foreground/30 ml-2">
               {generations?.length === 0
                 ? "Aucune génération récente"
                 : "Aucun résultat avec ces filtres"}

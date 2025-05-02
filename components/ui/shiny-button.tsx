@@ -11,7 +11,7 @@ const animationProps = {
   transition: {
     repeat: Infinity,
     repeatType: "loop",
-    repeatDelay: 0.5,
+    repeatDelay: 0.25,
     type: "spring",
     stiffness: 20,
     damping: 15,

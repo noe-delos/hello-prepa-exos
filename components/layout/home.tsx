@@ -146,8 +146,14 @@ export default function QuestionGenerator({ user }: any) {
     );
 
     try {
+      // Determine which API endpoint to call based on the sous-test
+      const apiEndpoint =
+        formState.sousTest === "condMinimales"
+          ? "/api/generate/condmin"
+          : "/api/generate";
+
       // Call generate API with user ID
-      const response = await fetch("/api/generate", {
+      const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -180,32 +186,37 @@ export default function QuestionGenerator({ user }: any) {
       triggerConfetti();
 
       // Custom success toast with green styling and icons
-      toast.custom(() => (
-        <div className="relative flex w-full min-w-[27rem] shadow-sm cursor-default items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 pl-1">
-          <div className="flex items-center justify-center pl-3">
-            <Icon
-              icon="icon-park-solid:check-one"
-              className="h-6 w-6 text-emerald-600"
-            />
-          </div>
-          <div className="item flex flex-1 flex-col items-start justify-start gap-0 pl-2">
-            <p className="max-w-sm truncate text-sm font-medium text-gray-900">
-              Document généré avec succès!
-            </p>
-            <div className="h-fit text-sm text-gray-500">
-              Vous pouvez télécharger le document.
+      toast.custom(
+        () => (
+          <div className="relative flex w-full min-w-[27rem] shadow-sm cursor-default items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 pl-1">
+            <div className="flex items-center justify-center pl-3">
+              <Icon
+                icon="icon-park-solid:check-one"
+                className="h-6 w-6 text-emerald-600"
+              />
+            </div>
+            <div className="item flex flex-1 flex-col items-start justify-start gap-0 pl-2">
+              <p className="max-w-sm truncate text-sm font-medium text-gray-900">
+                Document généré avec succès!
+              </p>
+              <div className="h-fit text-sm text-gray-500">
+                Vous pouvez télécharger le document.
+              </div>
+            </div>
+            <div className="flex items-center pr-2">
+              <button
+                onClick={() => window.open(data.url, "_blank")}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 transition-colors"
+              >
+                <Icon icon="mdi:download" className="h-4 w-4" />
+              </button>
             </div>
           </div>
-          <div className="flex items-center pr-2">
-            <button
-              onClick={() => window.open(data.url, "_blank")}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 transition-colors"
-            >
-              <Icon icon="mdi:download" className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      ));
+        ),
+        {
+          duration: 10000,
+        }
+      );
 
       // Invalidate the generations query to refresh the sidebar
       queryClient.invalidateQueries({ queryKey: ["generations"] });
@@ -287,7 +298,7 @@ export default function QuestionGenerator({ user }: any) {
                     isPanelOpen ? "grid grid-cols-2 gap-2" : "space-y-3"
                   )}
                 >
-                  {/* Seule l'option Calcul est active pour l'instant */}
+                  {/* Option Compréhension reste désactivée pour l'instant */}
                   <div className="flex items-center gap-3">
                     <div
                       className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
@@ -388,7 +399,6 @@ export default function QuestionGenerator({ user }: any) {
                         className="sr-only"
                         checked={formState.sousTest === "condMinimales"}
                         onChange={() => {}}
-                        disabled
                       />
                       <div
                         className={cn(
@@ -401,12 +411,9 @@ export default function QuestionGenerator({ user }: any) {
                     </div>
                     <label
                       htmlFor="condMinimales"
-                      className="cursor-not-allowed opacity-50"
+                      onClick={() => handleSousTestChange("condMinimales")}
                     >
                       Cond. Minimales
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        Bientôt disponible
-                      </Badge>
                     </label>
                   </div>
                 </CardContent>
