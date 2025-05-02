@@ -179,14 +179,33 @@ export default function QuestionGenerator({ user }: any) {
       // Trigger confetti effect
       triggerConfetti();
 
-      // Success toast with circular download button
-      toast.success("Document généré avec succès!", {
-        description: "Vous pouvez télécharger le document.",
-        action: {
-          label: "",
-          onClick: () => window.open(data.url, "_blank"),
-        },
-      });
+      // Custom success toast with green styling and icons
+      toast.custom(() => (
+        <div className="relative flex w-full min-w-[27rem] shadow-sm cursor-default items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 pl-1">
+          <div className="flex items-center justify-center pl-3">
+            <Icon
+              icon="icon-park-solid:check-one"
+              className="h-6 w-6 text-emerald-600"
+            />
+          </div>
+          <div className="item flex flex-1 flex-col items-start justify-start gap-0 pl-2">
+            <p className="max-w-sm truncate text-sm font-medium text-gray-900">
+              Document généré avec succès!
+            </p>
+            <div className="h-fit text-sm text-gray-500">
+              Vous pouvez télécharger le document.
+            </div>
+          </div>
+          <div className="flex items-center pr-2">
+            <button
+              onClick={() => window.open(data.url, "_blank")}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-white hover:bg-gray-800 transition-colors"
+            >
+              <Icon icon="mdi:download" className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ));
 
       // Invalidate the generations query to refresh the sidebar
       queryClient.invalidateQueries({ queryKey: ["generations"] });
@@ -344,7 +363,6 @@ export default function QuestionGenerator({ user }: any) {
                         className="sr-only"
                         checked={formState.sousTest === "raisonnement"}
                         onChange={() => {}}
-                        disabled
                       />
                       <div
                         className={cn(
@@ -355,15 +373,7 @@ export default function QuestionGenerator({ user }: any) {
                         )}
                       ></div>
                     </div>
-                    <label
-                      htmlFor="raisonnement"
-                      className="cursor-not-allowed opacity-50"
-                    >
-                      Raisonnement
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        Bientôt disponible
-                      </Badge>
-                    </label>
+                    <label htmlFor="raisonnement">Raisonnement</label>
                   </div>
                   <div className="flex items-center gap-3">
                     <div
