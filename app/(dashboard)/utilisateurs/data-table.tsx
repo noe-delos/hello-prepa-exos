@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// app/(dashboard)/utilisateurs/data-table.tsx
 "use client";
 
 import { useState } from "react";
@@ -18,6 +17,23 @@ import { User } from "@/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -26,7 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Icon } from "@iconify/react";
-import { deleteUser } from "./actions";
+import { createUser, deleteUser } from "./actions";
 
 interface DataTableProps {
   data: User[];
@@ -36,6 +52,7 @@ interface DataTableProps {
 export function DataTable({ data, isAdmin }: DataTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [open, setOpen] = useState(false);
   const itemsPerPage = 10;
 
   // Filter data based on search query
@@ -59,7 +76,7 @@ export function DataTable({ data, isAdmin }: DataTableProps) {
 
   return (
     <div>
-      <div className="flex items-center py-4">
+      <div className="flex items-center justify-between py-4">
         <Input
           placeholder="Rechercher un utilisateur..."
           value={searchQuery}
@@ -69,6 +86,98 @@ export function DataTable({ data, isAdmin }: DataTableProps) {
           }}
           className="max-w-sm"
         />
+
+        {isAdmin && (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Icon icon="mdi-light:plus" className="mr-2" />
+                Créer un utilisateur
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Créer un utilisateur</DialogTitle>
+                <DialogDescription>
+                  Remplissez les informations pour créer un nouvel utilisateur.
+                </DialogDescription>
+              </DialogHeader>
+              <form
+                action={async (formData) => {
+                  console.log("FORM DATA:", formData);
+                  await createUser(formData);
+                  setOpen(false);
+                }}
+              >
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="name" className="text-right">
+                      Prénom
+                    </Label>
+                    <Input
+                      id="name"
+                      name="name"
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="surname" className="text-right">
+                      Nom
+                    </Label>
+                    <Input
+                      id="surname"
+                      name="surname"
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="email" className="text-right">
+                      Email
+                    </Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="password" className="text-right">
+                      Mot de passe
+                    </Label>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      className="col-span-3"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="role" className="text-right">
+                      Rôle
+                    </Label>
+                    <Select name="role" defaultValue="member">
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Sélectionnez un rôle" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Administrateur</SelectItem>
+                        <SelectItem value="member">Membre</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="submit">Créer</Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <div className="rounded-md border">

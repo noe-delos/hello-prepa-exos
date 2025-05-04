@@ -42,6 +42,11 @@ Tu devras :
    - exercises: Tableau d'objets exercice avec question, options, réponse et éventuellement explication
    - conclusion: Texte de conclusion bref
 
+6. Gestion des images : 
+   - Si tu crées une variation d'un exercice dont le champ "image" a la valeur "{INSÉRER IMAGE}", ton exercice généré doit également inclure un champ image avec la valeur "{INSÉRER IMAGE}".
+   - Si tu crées un exercice inédit lié à la géométrie (figures géométriques, représentations spatiales, etc.) ou tout autre exercice qui bénéficierait d'une représentation visuelle, tu dois inclure un champ image avec la valeur "{INSÉRER IMAGE}".
+   - Pour tous les exercices nécessitant une visualisation (tableaux de données, graphiques, figures géométriques, etc.), inclure le champ image avec la valeur "{INSÉRER IMAGE}".
+
 Contraintes Cruciales :
 
 - Les exercices doivent être strictement limités aux concepts et aux types de problèmes relevant de la sous-partie spécifiée du TAGE MAGE.
@@ -67,7 +72,8 @@ Format de sortie JSON attendu :
       },
       "answer": "Lettre de la réponse correcte (A, B, C, D ou E)",
       "explanation": "Explication détaillée du raisonnement (si demandé)",
-      "shortExplanation": "Version courte de l'explication (si demandé)"
+      "shortExplanation": "Version courte de l'explication (si demandé)",
+      "image": "{INSÉRER IMAGE}" // Uniquement pour les exercices nécessitant une visualisation
     },
     // Plus d'exercices...
   ],

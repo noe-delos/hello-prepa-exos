@@ -1,34 +1,11 @@
-// app/(dashboard)/utilisateurs/actions.ts
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 export async function createUser(formData: FormData) {
-  const supabase = await createClient();
-
-  // Check if the current user is an admin
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    return { error: "Non autorisé" };
-  }
-
-  const { data: userProfile } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", authUser.id)
-    .single();
-
-  if (userProfile?.role !== "admin") {
-    return {
-      error:
-        "Accès refusé. Seuls les administrateurs peuvent créer des utilisateurs.",
-    };
-  }
+  const supabase = createAdminClient();
 
   // Get form data
   const email = formData.get("email") as string;
@@ -69,29 +46,7 @@ export async function createUser(formData: FormData) {
 }
 
 export async function deleteUser(userId: string) {
-  const supabase = await createClient();
-
-  // Check if the current user is an admin
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    return { error: "Non autorisé" };
-  }
-
-  const { data: userProfile } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", authUser.id)
-    .single();
-
-  if (userProfile?.role !== "admin") {
-    return {
-      error:
-        "Accès refusé. Seuls les administrateurs peuvent supprimer des utilisateurs.",
-    };
-  }
+  const supabase = createAdminClient();
 
   // Delete the user profile
   const { error: profileError } = await supabase

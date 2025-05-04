@@ -113,8 +113,7 @@ export async function POST(request: NextRequest) {
         E: exercise.E,
       },
       answer: exercise.Réponse,
-      image:
-        exercise.Image && exercise.Image !== "EMPTY" ? exercise.Image : null,
+      image: exercise.Image === "TRUE" ? "{INSÉRER IMAGE}" : null,
       theme:
         exercise.Thème && exercise.Thème !== "EMPTY" ? exercise.Thème : null,
     }));
@@ -159,7 +158,7 @@ export async function POST(request: NextRequest) {
 
     // Call OpenAI to generate exercises
     const prompt = `Générer ${questionCount} exercices ${
-      niveau === "mixte" ? "de niveaux variés" : `de niveau ${niveau}`
+      niveau === "mixte" ? "de niveau varié" : `de niveau ${niveau}`
     } 
 pour le sous-test "${sousTest}" ${distributionText}. 
 Fournir ces exercices ${correctionDescription}.

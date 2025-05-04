@@ -1,10 +1,6 @@
-// app/(dashboard)/utilisateurs/page.tsx
 import { createClient } from "@/utils/supabase/server";
 import { DataTable } from "./data-table";
 import { User } from "@/types";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { Icon } from "@iconify/react";
 
 export default async function UsersPage() {
   const supabase = await createClient();
@@ -33,15 +29,6 @@ export default async function UsersPage() {
     <div className="space-y-6 w-full">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Utilisateurs</h1>
-
-        {isAdmin && (
-          <Link href="/utilisateurs/creer">
-            <Button>
-              <Icon icon="mdi-light:plus" className="mr-2" />
-              Créer un utilisateur
-            </Button>
-          </Link>
-        )}
       </div>
 
       <DataTable data={(users as User[]) || []} isAdmin={isAdmin} />

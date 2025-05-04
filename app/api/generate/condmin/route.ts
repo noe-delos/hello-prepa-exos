@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     // Call OpenAI to generate exercises
     const prompt = `Générer ${questionCount} exercices ${
-      niveau === "mixte" ? "de niveaux variés" : `de niveau ${niveau}`
+      niveau === "mixte" ? "de niveau varié" : `de niveau ${niveau}`
     } pour le sous-test "Conditions Minimales" ${distributionText}. 
 Fournir ces exercices ${correctionDescription}.
 
