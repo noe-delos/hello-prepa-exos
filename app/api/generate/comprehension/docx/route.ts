@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
-// src/app/api/generate/docx/route.ts
+// src/app/api/generate/comprehension/docx/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import * as docx from "docx";
 import { Packer } from "docx";
@@ -13,25 +14,39 @@ const DocxRequestSchema = z.object({
   content: z.object({
     title: z.string(),
     introduction: z.string(),
-    exercises: z.array(
+    texts: z.array(
       z.object({
-        question: z
-          .union([z.string(), z.number()])
-          .transform((val) => String(val)),
-        options: z.object({
-          A: z.union([z.string(), z.number()]).transform((val) => String(val)),
-          B: z.union([z.string(), z.number()]).transform((val) => String(val)),
-          C: z.union([z.string(), z.number()]).transform((val) => String(val)),
-          D: z.union([z.string(), z.number()]).transform((val) => String(val)),
-          E: z.union([z.string(), z.number()]).transform((val) => String(val)),
-        }),
-        answer: z
-          .union([z.string(), z.number()])
-          .transform((val) => String(val))
-          .optional(),
-        explanation: z.string().optional(),
-        shortExplanation: z.string().optional(),
-        image: z.string().optional(),
+        content: z.string(),
+        questions: z.array(
+          z.object({
+            question: z
+              .union([z.string(), z.number()])
+              .transform((val) => String(val)),
+            options: z.object({
+              A: z
+                .union([z.string(), z.number()])
+                .transform((val) => String(val)),
+              B: z
+                .union([z.string(), z.number()])
+                .transform((val) => String(val)),
+              C: z
+                .union([z.string(), z.number()])
+                .transform((val) => String(val)),
+              D: z
+                .union([z.string(), z.number()])
+                .transform((val) => String(val)),
+              E: z
+                .union([z.string(), z.number()])
+                .transform((val) => String(val)),
+            }),
+            answer: z
+              .union([z.string(), z.number()])
+              .transform((val) => String(val))
+              .optional(),
+            explanation: z.string().optional(),
+            shortExplanation: z.string().optional(),
+          })
+        ),
       })
     ),
     conclusion: z.string(),
@@ -40,7 +55,7 @@ const DocxRequestSchema = z.object({
   correctionType: z
     .enum(["sansCorrection", "correctionCourte", "correctionDetaillee"])
     .default("sansCorrection"),
-  randomExercises: z.array(z.any()).optional(),
+  textsWithQuestions: z.array(z.any()).optional(),
 });
 
 // Images en base64 pour le logo et le filigrane - Utiliser des images minimalistes valides
@@ -50,15 +65,15 @@ const watermarkBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 export async function POST(request: NextRequest) {
-  console.log("DOCX API: Route called");
+  console.log("DOCX Comprehension API: Route called");
   try {
     // Récupérer et valider le corps de la requête
     const requestBody = await request.json();
-    console.log("DOCX API: Request body received");
+    console.log("DOCX Comprehension API: Request body received");
 
     // Log de débogage supplémentaire
     console.log(
-      "DOCX API: Request body structure:",
+      "DOCX Comprehension API: Request body structure:",
       Object.keys(requestBody),
       "userId:",
       requestBody.userId,
@@ -68,14 +83,14 @@ export async function POST(request: NextRequest) {
       requestBody.correctionType,
       "content keys:",
       Object.keys(requestBody.content || {}),
-      "exercises count:",
-      requestBody.content?.exercises?.length || 0
+      "texts count:",
+      requestBody.content?.texts?.length || 0
     );
 
     const validationResult = DocxRequestSchema.safeParse(requestBody);
     if (!validationResult.success) {
       console.error(
-        "DOCX API: Validation error:",
+        "DOCX Comprehension API: Validation error:",
         JSON.stringify(validationResult.error)
       );
       return NextResponse.json(
@@ -91,40 +106,14 @@ export async function POST(request: NextRequest) {
       correctionType = "sansCorrection",
     } = validationResult.data;
     console.log(
-      `DOCX API: Processing document for user ${userId} with title ${title} and correction type ${correctionType}`
+      `DOCX Comprehension API: Processing document for user ${userId} with title ${title} and correction type ${correctionType}`
     );
 
     // Vérifier et nettoyer les données
-    console.log("DOCX API: Cleaning and validating data");
-    // S'assurer que tous les champs nécessaires sont présents et valides
-    content.exercises = content.exercises.map((exercise, index) => {
-      console.log(`DOCX API: Processing exercise ${index + 1}`);
-
-      // S'assurer que les options sont des chaînes
-      exercise.options = {
-        A: String(exercise.options.A || ""),
-        B: String(exercise.options.B || ""),
-        C: String(exercise.options.C || ""),
-        D: String(exercise.options.D || ""),
-        E: String(exercise.options.E || ""),
-      };
-
-      // S'assurer que la question est une chaîne et nettoyer les mentions inutiles
-      exercise.question = String(exercise.question || `Question ${index + 1}`);
-      exercise.question = exercise.question
-        .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
-        .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
-
-      // S'assurer que la réponse est une chaîne
-      if (exercise.answer) {
-        exercise.answer = String(exercise.answer);
-      }
-
-      return exercise;
-    });
+    console.log("DOCX Comprehension API: Cleaning and validating data");
 
     // Générer le document DOCX
-    console.log("DOCX API: Generating document");
+    console.log("DOCX Comprehension API: Generating document");
     const doc = generateDocument(
       content,
       logoBase64,
@@ -133,7 +122,7 @@ export async function POST(request: NextRequest) {
     );
 
     // Créer le buffer pour le document
-    console.log("DOCX API: Creating document buffer");
+    console.log("DOCX Comprehension API: Creating document buffer");
     const buffer = await Packer.toBuffer(doc);
 
     // Initialiser le client Supabase
@@ -144,7 +133,9 @@ export async function POST(request: NextRequest) {
     const fileName = `${title.replace(/\s+/g, "_")}_${timestamp}.docx`;
 
     // Uploader le fichier dans Supabase Storage
-    console.log(`DOCX API: Uploading file "${fileName}" to Supabase Storage`);
+    console.log(
+      `DOCX Comprehension API: Uploading file "${fileName}" to Supabase Storage`
+    );
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from("documents")
       .upload(`${userId}/${fileName}`, buffer, {
@@ -154,7 +145,7 @@ export async function POST(request: NextRequest) {
       });
 
     if (uploadError) {
-      console.error("DOCX API: Upload error:", uploadError);
+      console.error("DOCX Comprehension API: Upload error:", uploadError);
       return NextResponse.json(
         { error: "Failed to upload document", details: uploadError },
         { status: 500 }
@@ -162,30 +153,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Générer l'URL publique du document
-    console.log("DOCX API: Generating public URL");
+    console.log("DOCX Comprehension API: Generating public URL");
     const { data: urlData } = await supabase.storage
       .from("documents")
       .createSignedUrl(`${userId}/${fileName}`, 60 * 60 * 24 * 7); // 7 jours
 
     if (!urlData) {
-      console.error("DOCX API: Failed to generate signed URL");
+      console.error("DOCX Comprehension API: Failed to generate signed URL");
       return NextResponse.json(
         { error: "Failed to generate document URL" },
         { status: 500 }
       );
     }
 
-    console.log("DOCX API: Document successfully generated and uploaded");
+    console.log(
+      "DOCX Comprehension API: Document successfully generated and uploaded"
+    );
     return NextResponse.json({
       success: true,
       url: urlData.signedUrl,
       id: uploadData.path,
     });
   } catch (error) {
-    console.error("DOCX API: Error generating document:", error);
+    console.error("DOCX Comprehension API: Error generating document:", error);
     // Log plus détaillé pour comprendre l'erreur
     if (error instanceof Error) {
-      console.error("DOCX API: Error details:", {
+      console.error("DOCX Comprehension API: Error details:", {
         message: error.message,
         stack: error.stack,
         name: error.name,
@@ -205,12 +198,12 @@ export async function POST(request: NextRequest) {
 // Fonction pour générer le document DOCX
 function generateDocument(
   content: any,
-  logoBase64: string,
-  watermarkBase64: string,
+  logoBase64: any,
+  watermarkBase64: any,
   correctionType = "sansCorrection"
 ) {
   try {
-    console.log("DOCX API: Starting document generation");
+    console.log("DOCX Comprehension API: Starting document generation");
 
     // Créer le document avec les styles par défaut
     const doc = new docx.Document({
@@ -450,7 +443,9 @@ function generateDocument(
                               },
                               children: [
                                 new docx.TextRun({
-                                  text: content.title || "Calcul - Exercices",
+                                  text:
+                                    content.title ||
+                                    "Compréhension - Exercices",
                                   size: 36,
                                   bold: true,
                                   font: "Calibri",
@@ -700,211 +695,371 @@ function generateDocument(
               ],
             }),
           },
-          children: generateQuestionParagraphs(
-            content.exercises,
+          children: generateComprehensionParagraphs(
+            content.texts,
             correctionType
           ),
         },
       ],
     });
 
-    console.log("DOCX API: Document generation completed successfully");
+    console.log(
+      "DOCX Comprehension API: Document generation completed successfully"
+    );
     return doc;
   } catch (error) {
-    console.error("DOCX API: Error in generateDocument:", error);
+    console.error("DOCX Comprehension API: Error in generateDocument:", error);
     // Rethrow the error for handling in the main function
     throw error;
   }
 }
 
-// Fonction pour générer les paragraphes de questions
-function generateQuestionParagraphs(
-  exercises: any,
+// Fonction pour générer les paragraphes des textes et questions
+function generateComprehensionParagraphs(
+  texts: any,
   correctionType = "sansCorrection"
 ) {
   try {
-    console.log("DOCX API: Generating question paragraphs");
-    const children: any[] = [];
+    console.log(
+      "DOCX Comprehension API: Generating texts and questions paragraphs"
+    );
+    const children: any = [];
 
-    // Log des informations sur les exercices
-    console.log(`DOCX API: Processing ${exercises.length} exercises`);
+    // Loop through texts
+    texts.forEach((textItem: any, textIndex: any) => {
+      console.log(
+        `DOCX Comprehension API: Building text ${textIndex + 1} with ${
+          textItem.questions.length
+        } questions`
+      );
 
-    // Loop through exercises
-    exercises.forEach((exercise: any, index: number) => {
-      console.log(`DOCX API: Building exercise ${index + 1}`);
+      // Determine if a page break is needed
+      const needsPageBreak = textIndex > 0;
 
-      // MODIFIED: Put 3 exercises on the first page, then 4 per page after that
-      // This means page breaks at indices 3, 7, 11, 15, etc.
-      // First page: indices 0, 1, 2
-      // Second page: indices 3, 4, 5, 6
-      // Third page: indices 7, 8, 9, 10
-      // And so on...
-      const needsPageBreak =
-        index === 3 || (index > 3 && (index - 3) % 4 === 0);
-
-      // Question text
+      // Texte title
       children.push(
         new docx.Paragraph({
           spacing: {
-            before: 200,
+            before: 400,
+            after: 200,
           },
           pageBreakBefore: needsPageBreak,
           children: [
             new docx.TextRun({
-              text: `Question ${index + 1}. `,
+              text: `TEXTE ${textIndex + 1} : `,
               bold: true,
-              font: "Calibri",
-            }),
-            new docx.TextRun({
-              text: String(exercise.question),
+              size: 28,
               font: "Calibri",
             }),
           ],
         })
       );
 
-      // Check if there's an "{INSÉRER IMAGE}" instruction
-      if (exercise.image === "{INSÉRER IMAGE}") {
-        try {
-          console.log(
-            `DOCX API: Adding image placeholder for exercise ${index + 1}`
-          );
-          children.push(
-            new docx.Paragraph({
-              spacing: {
-                before: 200,
-                after: 200,
-              },
-              children: [
-                new docx.TextRun({
-                  text: "{INSÉRER IMAGE}",
-                  font: "Calibri",
-                  bold: true,
-                  color: "808080", // Gray color
-                  size: 24, // Larger size
-                }),
-              ],
-              alignment: docx.AlignmentType.CENTER,
+      // Text content
+      // Parse text to identify (Question X) markers and make them bold
+      const textContent = textItem.content;
+      const parts = textContent.split(/(\(Question \d+\))/g);
+
+      // Create text paragraphs
+      const textParagraphs = [];
+      const currentParagraph: any = [];
+
+      parts.forEach((part: any) => {
+        if (part.match(/\(Question \d+\)/)) {
+          // This is a question marker, make it bold
+          currentParagraph.push(
+            new docx.TextRun({
+              text: part,
+              bold: true,
+              font: "Calibri",
             })
           );
-        } catch (error) {
-          console.error(
-            `DOCX API: Error adding image placeholder for question ${
-              index + 1
-            }`,
-            error
+        } else if (part.trim() !== "") {
+          // This is regular text
+          currentParagraph.push(
+            new docx.TextRun({
+              text: part,
+              font: "Calibri",
+            })
           );
-          // Continue without the image placeholder
         }
-      }
+      });
 
-      // Options
-      const options = [
-        { letter: "A", text: exercise.options.A },
-        { letter: "B", text: exercise.options.B },
-        { letter: "C", text: exercise.options.C },
-        { letter: "D", text: exercise.options.D },
-        { letter: "E", text: exercise.options.E },
-      ];
+      // Add the text paragraph
+      children.push(
+        new docx.Paragraph({
+          spacing: {
+            before: 0,
+            after: 200,
+          },
+          children: currentParagraph,
+        })
+      );
 
-      options.forEach((option, optIndex) => {
-        // Only bold the correct option if correction is requested
-        const isCorrectOption = exercise.answer === option.letter;
-        const shouldBeBold =
-          correctionType !== "sansCorrection" && isCorrectOption;
+      // Add only the first two questions after the text
+      const questionsToAddWithText = Math.min(2, textItem.questions.length);
 
+      for (let i = 0; i < questionsToAddWithText; i++) {
+        const question = textItem.questions[i];
+
+        // Add question text
         children.push(
           new docx.Paragraph({
             spacing: {
-              before: optIndex === 0 ? 200 : 0, // Space before first option
-              after: optIndex === options.length - 1 ? 200 : 0, // Less space after last option
+              before: 200,
             },
             children: [
               new docx.TextRun({
-                text: `(${option.letter}) ${option.text}`,
+                text: `Question ${i + 1}. `,
+                bold: true,
                 font: "Calibri",
-                bold: shouldBeBold,
+              }),
+              new docx.TextRun({
+                text: String(question.question),
+                font: "Calibri",
               }),
             ],
           })
         );
-      });
 
-      // Add explanation if correction is requested
-      if (correctionType !== "sansCorrection") {
-        // For short correction, show a brief explanation
-        if (
-          correctionType === "correctionCourte" &&
-          exercise.shortExplanation
-        ) {
+        // Add options
+        const options = [
+          { letter: "A", text: question.options.A },
+          { letter: "B", text: question.options.B },
+          { letter: "C", text: question.options.C },
+          { letter: "D", text: question.options.D },
+          { letter: "E", text: question.options.E },
+        ];
+
+        options.forEach((option, optIndex) => {
+          // Only bold the correct option if correction is requested
+          const isCorrectOption = question.answer === option.letter;
+          const shouldBeBold =
+            correctionType !== "sansCorrection" && isCorrectOption;
+
           children.push(
             new docx.Paragraph({
               spacing: {
-                before: 200,
-                after: 400,
+                before: optIndex === 0 ? 100 : 0, // Less space between question and first option
+                after: optIndex === options.length - 1 ? 100 : 0, // Less space after last option
               },
               children: [
                 new docx.TextRun({
-                  text: "Explication: ",
-                  bold: true,
+                  text: `(${option.letter}) ${option.text}`,
                   font: "Calibri",
-                }),
-                new docx.TextRun({
-                  text: `${exercise.answer}. ${exercise.shortExplanation}`,
-                  font: "Calibri",
+                  bold: shouldBeBold,
                 }),
               ],
             })
           );
-        }
-        // For detailed correction, show the full explanation
-        else if (
-          correctionType === "correctionDetaillee" &&
-          exercise.explanation
-        ) {
-          children.push(
-            new docx.Paragraph({
-              spacing: {
-                before: 200,
-                after: 400,
-              },
-              children: [
-                new docx.TextRun({
-                  text: "Explication: ",
-                  bold: true,
-                  font: "Calibri",
-                }),
-                new docx.TextRun({
-                  text: exercise.explanation,
-                  font: "Calibri",
-                }),
-              ],
-            })
-          );
+        });
+
+        // Add explanation if correction is requested
+        if (correctionType !== "sansCorrection") {
+          // For short correction, show a brief explanation
+          if (
+            correctionType === "correctionCourte" &&
+            question.shortExplanation
+          ) {
+            children.push(
+              new docx.Paragraph({
+                spacing: {
+                  before: 100,
+                  after: 200,
+                },
+                children: [
+                  new docx.TextRun({
+                    text: `Réponse ${i + 1} : `,
+                    bold: true,
+                    font: "Calibri",
+                  }),
+                  new docx.TextRun({
+                    text: `${question.answer}. ${question.shortExplanation}`,
+                    font: "Calibri",
+                  }),
+                ],
+              })
+            );
+          }
+          // For detailed correction, show the full explanation
+          else if (
+            correctionType === "correctionDetaillee" &&
+            question.explanation
+          ) {
+            children.push(
+              new docx.Paragraph({
+                spacing: {
+                  before: 100,
+                  after: 200,
+                },
+                children: [
+                  new docx.TextRun({
+                    text: `Réponse ${i + 1} : `,
+                    bold: true,
+                    font: "Calibri",
+                  }),
+                  new docx.TextRun({
+                    text: `${question.answer}. ${question.explanation}`,
+                    font: "Calibri",
+                  }),
+                ],
+              })
+            );
+          }
         }
       }
 
-      // Add spacing after each exercise using empty paragraphs
-      // This helps prevent content from being split awkwardly across pages
-      children.push(new docx.Paragraph({ text: "" }));
+      // Add a page break after each text and its first two questions
+      if (textItem.questions.length > 2) {
+        children.push(
+          new docx.Paragraph({
+            pageBreakBefore: false,
+          })
+        );
 
-      // Simplified spacing logic - just add consistent spacing between exercises
-      // The page breaks are now controlled by the needsPageBreak logic above
+        // Add the remaining questions on new pages
+        for (
+          let i = questionsToAddWithText;
+          i < textItem.questions.length;
+          i++
+        ) {
+          const question = textItem.questions[i];
+
+          // Add question text
+          children.push(
+            new docx.Paragraph({
+              spacing: {
+                before: 200,
+              },
+              children: [
+                new docx.TextRun({
+                  text: `Question ${i + 1} (Texte ${textIndex + 1}). `,
+                  bold: true,
+                  font: "Calibri",
+                }),
+                new docx.TextRun({
+                  text: String(question.question),
+                  font: "Calibri",
+                }),
+              ],
+            })
+          );
+
+          // Add options
+          const options = [
+            { letter: "A", text: question.options.A },
+            { letter: "B", text: question.options.B },
+            { letter: "C", text: question.options.C },
+            { letter: "D", text: question.options.D },
+            { letter: "E", text: question.options.E },
+          ];
+
+          options.forEach((option, optIndex) => {
+            // Only bold the correct option if correction is requested
+            const isCorrectOption = question.answer === option.letter;
+            const shouldBeBold =
+              correctionType !== "sansCorrection" && isCorrectOption;
+
+            children.push(
+              new docx.Paragraph({
+                spacing: {
+                  before: optIndex === 0 ? 100 : 0,
+                  after: optIndex === options.length - 1 ? 100 : 0,
+                },
+                children: [
+                  new docx.TextRun({
+                    text: `(${option.letter}) ${option.text}`,
+                    font: "Calibri",
+                    bold: shouldBeBold,
+                  }),
+                ],
+              })
+            );
+          });
+
+          // Add explanation if correction is requested
+          if (correctionType !== "sansCorrection") {
+            // For short correction, show a brief explanation
+            if (
+              correctionType === "correctionCourte" &&
+              question.shortExplanation
+            ) {
+              children.push(
+                new docx.Paragraph({
+                  spacing: {
+                    before: 100,
+                    after: 200,
+                  },
+                  children: [
+                    new docx.TextRun({
+                      text: `Réponse ${i + 1} : `,
+                      bold: true,
+                      font: "Calibri",
+                    }),
+                    new docx.TextRun({
+                      text: `${question.answer}. ${question.shortExplanation}`,
+                      font: "Calibri",
+                    }),
+                  ],
+                })
+              );
+            }
+            // For detailed correction, show the full explanation
+            else if (
+              correctionType === "correctionDetaillee" &&
+              question.explanation
+            ) {
+              children.push(
+                new docx.Paragraph({
+                  spacing: {
+                    before: 100,
+                    after: 200,
+                  },
+                  children: [
+                    new docx.TextRun({
+                      text: `Réponse ${i + 1} : `,
+                      bold: true,
+                      font: "Calibri",
+                    }),
+                    new docx.TextRun({
+                      text: `${question.answer}. ${question.explanation}`,
+                      font: "Calibri",
+                    }),
+                  ],
+                })
+              );
+            }
+          }
+
+          // Add a page break after each question (except the last one)
+          if (i < textItem.questions.length - 1 && (i + 1) % 3 === 0) {
+            children.push(
+              new docx.Paragraph({
+                pageBreakBefore: false,
+              })
+            );
+          }
+        }
+      }
+
+      // Add space after each text and its questions
       children.push(new docx.Paragraph({ text: "" }));
       children.push(new docx.Paragraph({ text: "" }));
     });
 
-    // No extra paragraphs at the end to avoid blank pages
-    console.log("DOCX API: Question paragraphs generation completed");
+    console.log("DOCX Comprehension API: Text paragraphs generation completed");
     return children;
   } catch (error) {
-    console.error("DOCX API: Error in generateQuestionParagraphs:", error);
+    console.error(
+      "DOCX Comprehension API: Error in generateComprehensionParagraphs:",
+      error
+    );
     // En cas d'erreur, retourner un paragraphe d'erreur pour éviter de bloquer toute la génération
     return [
       new docx.Paragraph({
         children: [
           new docx.TextRun({
-            text: "Une erreur est survenue lors de la génération des questions. Veuillez réessayer.",
+            text: "Une erreur est survenue lors de la génération des textes et questions. Veuillez réessayer.",
             font: "Calibri",
             color: "FF0000",
           }),

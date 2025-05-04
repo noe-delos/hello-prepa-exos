@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable react/no-unescaped-entities */
 
 "use client";
 
@@ -94,16 +93,26 @@ export default function QuestionGenerator({ user }: any) {
 
   // State for form values
   const [formState, setFormState] = useState({
-    sousTest: "calcul", // Changé de "condMinimales" à "calcul"
+    sousTest: "calcul",
     niveau: "difficile",
     variationCount: 10,
     ineditsCount: 10,
     correctionType: "sansCorrection",
-    outputFormat: "docx", // Changé de "pdf" à "docx"
+    outputFormat: "docx",
   });
 
-  // Calculated total question count
-  const totalQuestionCount = formState.variationCount + formState.ineditsCount;
+  // Calculated total question count (changes based on sous-test)
+  const getTotalQuestionCount = () => {
+    if (formState.sousTest === "comprehension") {
+      // Pour Compréhension: variationCount = nombre de textes, ineditsCount = nombre de questions par texte
+      return formState.variationCount * formState.ineditsCount;
+    } else {
+      // Pour les autres sous-tests: somme simple des variations et inédits
+      return formState.variationCount + formState.ineditsCount;
+    }
+  };
+
+  const totalQuestionCount = getTotalQuestionCount();
 
   // Load saved preferences from localStorage
   useEffect(() => {
@@ -147,10 +156,14 @@ export default function QuestionGenerator({ user }: any) {
 
     try {
       // Determine which API endpoint to call based on the sous-test
-      const apiEndpoint =
-        formState.sousTest === "condMinimales"
-          ? "/api/generate/condmin"
-          : "/api/generate";
+      let apiEndpoint;
+      if (formState.sousTest === "condMinimales") {
+        apiEndpoint = "/api/generate/condmin";
+      } else if (formState.sousTest === "comprehension") {
+        apiEndpoint = "/api/generate/comprehension";
+      } else {
+        apiEndpoint = "/api/generate";
+      }
 
       // Call generate API with user ID
       const response = await fetch(apiEndpoint, {
@@ -241,7 +254,17 @@ export default function QuestionGenerator({ user }: any) {
 
   // Update form state handlers
   const handleSousTestChange = (value: any) => {
-    setFormState((prev) => ({ ...prev, sousTest: value }));
+    // Réinitialiser les valeurs par défaut en fonction du sous-test
+    if (value === "comprehension") {
+      setFormState((prev) => ({
+        ...prev,
+        sousTest: value,
+        variationCount: 2, // Nombre de textes par défaut
+        ineditsCount: 5, // Nombre de questions par texte par défaut
+      }));
+    } else {
+      setFormState((prev) => ({ ...prev, sousTest: value }));
+    }
   };
 
   const handleNiveauChange = (value: any) => {
@@ -263,6 +286,25 @@ export default function QuestionGenerator({ user }: any) {
       ineditsCount: numValue,
     }));
   };
+
+  // Déterminer les étiquettes des sliders en fonction du sous-test
+  const getSliderLabels = () => {
+    if (formState.sousTest === "comprehension") {
+      return {
+        variation: "Nombre de textes",
+        inedits: "Questions par texte",
+        total: "Total",
+      };
+    } else {
+      return {
+        variation: "Nombre de variations",
+        inedits: "Nombre d'inédits",
+        total: "Nombre total de questions",
+      };
+    }
+  };
+
+  const sliderLabels = getSliderLabels();
 
   return (
     <div
@@ -298,7 +340,7 @@ export default function QuestionGenerator({ user }: any) {
                     isPanelOpen ? "grid grid-cols-2 gap-2" : "space-y-3"
                   )}
                 >
-                  {/* Option Compréhension reste désactivée pour l'instant */}
+                  {/* Option Compréhension - maintenant activée */}
                   <div className="flex items-center gap-3">
                     <div
                       className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
@@ -312,7 +354,6 @@ export default function QuestionGenerator({ user }: any) {
                         className="sr-only"
                         checked={formState.sousTest === "comprehension"}
                         onChange={() => {}}
-                        disabled
                       />
                       <div
                         className={cn(
@@ -325,12 +366,9 @@ export default function QuestionGenerator({ user }: any) {
                     </div>
                     <label
                       htmlFor="comprehension"
-                      className="cursor-not-allowed opacity-50"
+                      onClick={() => handleSousTestChange("comprehension")}
                     >
                       Compréhension
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        Bientôt disponible
-                      </Badge>
                     </label>
                   </div>
                   <div className="flex items-center gap-3">
@@ -384,7 +422,12 @@ export default function QuestionGenerator({ user }: any) {
                         )}
                       ></div>
                     </div>
-                    <label htmlFor="raisonnement">Raisonnement</label>
+                    <label
+                      htmlFor="raisonnement"
+                      onClick={() => handleSousTestChange("raisonnement")}
+                    >
+                      Raisonnement
+                    </label>
                   </div>
                   <div className="flex items-center gap-3">
                     <div
@@ -548,7 +591,9 @@ export default function QuestionGenerator({ user }: any) {
             {/* Questions distribution section */}
             <div className="space-y-6">
               <h3 className="font-medium text-lg bg-zinc-100 p-3 py-2 rounded-lg">
-                Répartition des questions
+                {formState.sousTest === "comprehension"
+                  ? "Répartition des textes et questions"
+                  : "Répartition des questions"}
               </h3>
               <div
                 className={cn(
@@ -558,17 +603,17 @@ export default function QuestionGenerator({ user }: any) {
                     : "grid-cols-1 md:grid-cols-2"
                 )}
               >
-                {/* Variations */}
+                {/* Variations ou Textes */}
                 <div className="space-y-3">
                   <Label htmlFor="variation-count" className="text-base">
-                    Nombre de variations
+                    {sliderLabels.variation}
                   </Label>
                   <div className="flex gap-4 items-center">
                     <Slider
                       id="variation-slider"
                       value={[formState.variationCount]}
-                      max={50}
-                      min={0}
+                      max={formState.sousTest === "comprehension" ? 10 : 50}
+                      min={formState.sousTest === "comprehension" ? 1 : 0}
                       step={1}
                       className="w-full"
                       onValueChange={(value) =>
@@ -578,8 +623,8 @@ export default function QuestionGenerator({ user }: any) {
                     <Input
                       id="variation-count"
                       type="number"
-                      min={0}
-                      max={50}
+                      min={formState.sousTest === "comprehension" ? 1 : 0}
+                      max={formState.sousTest === "comprehension" ? 10 : 50}
                       value={formState.variationCount}
                       onChange={(e) =>
                         handleVariationCountChange(e.target.value)
@@ -589,17 +634,17 @@ export default function QuestionGenerator({ user }: any) {
                   </div>
                 </div>
 
-                {/* Inédits */}
+                {/* Inédits ou Questions par texte */}
                 <div className="space-y-3">
                   <Label htmlFor="inedits-count" className="text-base">
-                    Nombre d'inédits
+                    {sliderLabels.inedits}
                   </Label>
                   <div className="flex gap-4 items-center">
                     <Slider
                       id="inedits-slider"
                       value={[formState.ineditsCount]}
-                      max={50}
-                      min={0}
+                      max={formState.sousTest === "comprehension" ? 10 : 50}
+                      min={formState.sousTest === "comprehension" ? 1 : 0}
                       step={1}
                       className="w-full"
                       onValueChange={(value) =>
@@ -609,8 +654,8 @@ export default function QuestionGenerator({ user }: any) {
                     <Input
                       id="inedits-count"
                       type="number"
-                      min={0}
-                      max={50}
+                      min={formState.sousTest === "comprehension" ? 1 : 0}
+                      max={formState.sousTest === "comprehension" ? 10 : 50}
                       value={formState.ineditsCount}
                       onChange={(e) => handleIneditsCountChange(e.target.value)}
                       className="w-16 text-center"
@@ -620,7 +665,9 @@ export default function QuestionGenerator({ user }: any) {
               </div>
 
               <div className="text-center font-medium">
-                Nombre total de questions : {totalQuestionCount}
+                {formState.sousTest === "comprehension"
+                  ? `Nombre total de questions : ${totalQuestionCount} (${formState.variationCount} textes × ${formState.ineditsCount} questions par texte)`
+                  : `Nombre total de questions : ${totalQuestionCount}`}
               </div>
             </div>
 
