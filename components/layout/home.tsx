@@ -426,7 +426,7 @@ export default function QuestionGenerator({ user }: any) {
                       htmlFor="raisonnement"
                       onClick={() => handleSousTestChange("raisonnement")}
                     >
-                      Raisonnement
+                      Raisonnement / Argumentation
                     </label>
                   </div>
                   <div className="flex items-center gap-3">
@@ -457,6 +457,29 @@ export default function QuestionGenerator({ user }: any) {
                       onClick={() => handleSousTestChange("condMinimales")}
                     >
                       Cond. Minimales
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors">
+                      <input
+                        type="radio"
+                        id="comprehension"
+                        name="sous-test"
+                        value="comprehension"
+                        className="sr-only"
+                        onChange={() => {}}
+                        disabled
+                      />
+                      <div className={cn("h-3 w-3 rounded-full")}></div>
+                    </div>
+                    <label
+                      htmlFor="comprehension"
+                      className="cursor-not-allowed opacity-50"
+                    >
+                      Expressions
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        Bientôt disponible
+                      </Badge>
                     </label>
                   </div>
                 </CardContent>
