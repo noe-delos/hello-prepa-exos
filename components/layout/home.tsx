@@ -476,7 +476,7 @@ export default function QuestionGenerator({ user }: any) {
                       htmlFor="comprehension"
                       className="cursor-not-allowed opacity-50"
                     >
-                      Expressions
+                      Expression
                       <Badge variant="outline" className="ml-2 text-xs">
                         Bientôt disponible
                       </Badge>
