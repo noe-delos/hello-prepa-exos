@@ -4,6 +4,7 @@
 // src/app/api/generate/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { systemPrompt } from "./prompt"; // Importation du prompt système
@@ -11,6 +12,11 @@ import { systemPrompt } from "./prompt"; // Importation du prompt système
 // Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Initialize Anthropic
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 // Define validation schema for request body
@@ -22,7 +28,7 @@ const GenerateRequestSchema = z.object({
     "raisonnement",
     "condMinimales",
   ]),
-  niveau: z.enum(["facile", "moyen", "difficile", "mixte"]),
+  niveau: z.enum(["facile", "moyen", "difficile", "tresDifficile", "mixte"]),
   variationCount: z.number().int().min(0).max(50),
   ineditsCount: z.number().int().min(0).max(50),
   correctionType: z.enum([
@@ -32,6 +38,25 @@ const GenerateRequestSchema = z.object({
   ]),
   questionCount: z.number().int().min(1).max(100),
   outputFormat: z.enum(["docx"]), // Uniquement DOCX pour l'instant
+  llmModel: z.enum(["openai", "claude"]).default("openai"),
+  optionsCount: z.number().int().min(3).max(5).default(5),
+});
+
+// Schema to validate the generated content structure
+const GeneratedContentSchema = z.object({
+  title: z.string(),
+  introduction: z.string(),
+  exercises: z.array(
+    z.object({
+      question: z.string(),
+      options: z.record(z.string(), z.string()),
+      answer: z.string(),
+      explanation: z.string().optional(),
+      shortExplanation: z.string().optional(),
+      image: z.string().optional(),
+    })
+  ),
+  conclusion: z.string(),
 });
 
 export async function POST(request: NextRequest) {
@@ -64,6 +89,8 @@ export async function POST(request: NextRequest) {
       correctionType,
       questionCount,
       outputFormat,
+      llmModel,
+      optionsCount,
     } = validationResult.data;
 
     console.log("API: Request validated successfully with parameters:", {
@@ -75,6 +102,8 @@ export async function POST(request: NextRequest) {
       correctionType,
       questionCount,
       outputFormat,
+      llmModel,
+      optionsCount,
     });
 
     console.log("API: Initializing Supabase admin client");
@@ -156,9 +185,30 @@ export async function POST(request: NextRequest) {
     // For "mixte" niveau, we'll use "moyen" for the database to maintain compatibility
     const dbNiveau = niveau === "mixte" ? "moyen" : niveau;
 
-    // Call OpenAI to generate exercises
+    // Prepare the options text based on optionsCount
+    const optionsText =
+      optionsCount === 3
+        ? "(A, B, C)"
+        : optionsCount === 4
+        ? "(A, B, C, D)"
+        : "(A, B, C, D, E)";
+
+    // Convert optionsCount to actual option letters
+    const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+      String.fromCharCode(65 + i)
+    ); // A=65, B=66, etc.
+
+    // Create the difficulty distribution text for mixte niveau
+    const mixteDistributionText =
+      niveau === "mixte"
+        ? "selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile"
+        : "";
+
+    // Call LLM to generate exercises
     const prompt = `Générer ${questionCount} exercices ${
-      niveau === "mixte" ? "de niveau varié" : `de niveau ${niveau}`
+      niveau === "mixte"
+        ? "de niveau varié " + mixteDistributionText
+        : `de niveau ${niveau}`
     } 
 pour le sous-test "${sousTest}" ${distributionText}. 
 Fournir ces exercices ${correctionDescription}.
@@ -171,8 +221,8 @@ ${JSON.stringify(exercisesExamples, null, 2)}
 Pour chaque exercice, inclure :
 1. Une question claire sous forme de texte. 
    IMPORTANT: La question doit être directe et concise, sans mentions comme "Variation X" ou "Exercice X".
-2. Des options à choix multiples (A, B, C, D, E)
-3. La réponse correcte (lettre A, B, C, D ou E)
+2. Des options à choix multiples ${optionsText} - IMPORTANT: Fournir exactement ${optionsCount} options
+3. La réponse correcte (lettre ${optionLetters.join(", ")})
 ${
   correctionType !== "sansCorrection"
     ? correctionType === "correctionCourte"
@@ -181,95 +231,236 @@ ${
     : ""
 }
 
-Retourner le contenu dans un format JSON structuré avec ces champs :
-- title: Un titre pour le document
-- introduction: Texte d'introduction bref
-- exercises: Tableau d'objets exercice avec question (string), options, réponse ${
-      correctionType !== "sansCorrection"
-        ? correctionType === "correctionCourte"
-          ? "et shortExplanation"
-          : "et explanation"
-        : ""
+${
+  llmModel === "claude"
+    ? `TRÈS IMPORTANT: Ta réponse DOIT être au format JSON valide et complet, structuré exactement comme spécifié ci-dessous, sans commentaires ni texte supplémentaire avant ou après le JSON. Le JSON doit inclure tous les champs requis et respecter cette structure exacte:`
+    : `Retourner le contenu dans un format JSON structuré avec ces champs :`
+}
+{
+  "title": "Un titre pour le document",
+  "introduction": "Texte d'introduction bref",
+  "exercises": [
+    {
+      "question": "Énoncé de la question 1",
+      "options": {
+        ${optionLetters
+          .map((letter) => `"${letter}": "Option ${letter}"`)
+          .join(",\n        ")}
+      },
+      "answer": "Lettre de la réponse correcte",
+      ${
+        correctionType !== "sansCorrection"
+          ? correctionType === "correctionCourte"
+            ? `"shortExplanation": "Explication courte"`
+            : `"explanation": "Explication détaillée"`
+          : ""
+      }
     }
-- conclusion: Texte de conclusion bref`;
+    // Plus d'exercices...
+  ],
+  "conclusion": "Texte de conclusion bref"
+}
 
-    console.log("API: Calling OpenAI with prompt");
-    const completion = await openai.chat.completions.create({
-      model: "o3-mini", // Modèle o3 comme demandé
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt, // Utilisation du prompt système
-        },
-        { role: "user", content: prompt },
-      ],
-      response_format: { type: "json_object" },
-    });
-    console.log("API: OpenAI response received successfully");
+${
+  llmModel === "claude"
+    ? `Assure-toi que le JSON est valide et complet, avec tous les exercices demandés, et que chaque exercice contient tous les champs requis. N'ajoute aucun texte en dehors de l'objet JSON.`
+    : ""
+}`;
+
+    console.log(`API: Calling ${llmModel} with prompt`);
 
     let generatedContent;
-    try {
-      generatedContent = JSON.parse(
-        completion.choices[0].message.content || "{}"
+    let rawResponse = "";
+
+    if (llmModel === "openai") {
+      // Use OpenAI
+      const completion = await openai.chat.completions.create({
+        model: "o3-mini", // Modèle o3 comme demandé
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt, // Utilisation du prompt système
+          },
+          { role: "user", content: prompt },
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      console.log("API: OpenAI response received successfully");
+      rawResponse = completion.choices[0].message.content || "{}";
+    } else {
+      // Use Claude with thinking enabled
+      const msg: any = await anthropic.messages.create({
+        model: "claude-3-7-sonnet-20250219",
+        max_tokens: 20000,
+        temperature: 1,
+        system:
+          systemPrompt +
+          "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
+        messages: [{ role: "user", content: prompt }],
+        thinking: {
+          type: "enabled",
+          budget_tokens: 16000,
+        },
+      });
+
+      console.log(
+        "API: Claude response received successfully",
+        msg,
+        msg.content[1].text
       );
-      console.log("API: Parsed generated content successfully");
+      rawResponse = msg.content[1].text || "{}";
+    }
 
-      // Vérifier et normaliser les données si nécessaire
-      if (
-        generatedContent.exercises &&
-        Array.isArray(generatedContent.exercises)
-      ) {
-        generatedContent.exercises = generatedContent.exercises.map(
-          (exercise: any, _index: number) => {
-            // S'assurer que la question est une chaîne
-            if (typeof exercise.question !== "string") {
-              exercise.question = String(exercise.question);
-            }
+    // Additional processing for Claude responses to ensure valid JSON
+    if (llmModel === "claude") {
+      // Try to extract JSON from Claude's response (it might contain markdown code blocks or additional text)
+      console.log("API: Processing Claude response to extract JSON");
 
-            // Nettoyer la question pour enlever les mentions inutiles
-            exercise.question = exercise.question
-              .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
-              .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
-
-            // S'assurer que toutes les options sont présentes et sont des chaînes
-            if (!exercise.options) {
-              exercise.options = { A: "", B: "", C: "", D: "", E: "" };
-            } else {
-              ["A", "B", "C", "D", "E"].forEach((option) => {
-                if (!exercise.options[option]) {
-                  exercise.options[option] = "";
-                } else if (typeof exercise.options[option] !== "string") {
-                  exercise.options[option] = String(exercise.options[option]);
-                }
-              });
-            }
-
-            // S'assurer que la réponse est une chaîne
-            if (!exercise.answer) {
-              exercise.answer = "";
-            } else if (typeof exercise.answer !== "string") {
-              exercise.answer = String(exercise.answer);
-            }
-
-            return exercise;
-          }
-        );
+      // Check if response is wrapped in a code block
+      const jsonMatch = rawResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        rawResponse = jsonMatch[1].trim();
       }
 
-      // S'assurer que tous les champs requis sont présents
-      if (!generatedContent.title)
-        generatedContent.title = `Exercices de ${sousTest} TAGE MAGE - ${niveau}`;
-      if (!generatedContent.introduction)
-        generatedContent.introduction = `Voici une série d'exercices pour vous préparer à la section ${sousTest} du TAGE MAGE.`;
-      if (!generatedContent.conclusion)
-        generatedContent.conclusion = "Fin des exercices. Bonne préparation !";
+      // Remove any text before or after the JSON object
+      const jsonObjectMatch = rawResponse.match(/\{[\s\S]*\}/);
+      if (jsonObjectMatch) {
+        rawResponse = jsonObjectMatch[0];
+      }
+
+      console.log("API: Claude response processed", jsonObjectMatch);
+    }
+
+    try {
+      // Parse the raw JSON response
+      generatedContent = JSON.parse(rawResponse);
+      console.log("API: Parsed generated content successfully");
     } catch (parseError) {
-      console.error("API: Error parsing OpenAI response:", parseError);
-      console.log(
-        "API: Raw OpenAI response:",
-        completion.choices[0].message.content
+      console.error("API: Error parsing LLM response:", parseError);
+      console.log("API: Raw LLM response:", rawResponse);
+      return NextResponse.json(
+        {
+          error:
+            "Failed to parse LLM response. The model did not return valid JSON.",
+          details: String(parseError),
+        },
+        { status: 500 }
       );
-      throw new Error("Failed to parse OpenAI response");
+    }
+
+    // Validate the generated content against our schema
+    const contentValidation =
+      GeneratedContentSchema.safeParse(generatedContent);
+    if (!contentValidation.success) {
+      console.error(
+        "API: Generated content validation error:",
+        JSON.stringify(contentValidation.error)
+      );
+
+      // Attempt to fix the content structure
+      console.log("API: Attempting to fix content structure");
+
+      // Ensure all required fields are present
+      if (!generatedContent.title) {
+        generatedContent.title = `Exercices de ${sousTest} TAGE MAGE - ${niveau}`;
+      }
+      if (!generatedContent.introduction) {
+        generatedContent.introduction = `Voici une série d'exercices pour vous préparer à la section ${sousTest} du TAGE MAGE.`;
+      }
+      if (!generatedContent.conclusion) {
+        generatedContent.conclusion = "Fin des exercices. Bonne préparation !";
+      }
+
+      // Ensure exercises is an array
+      if (
+        !generatedContent.exercises ||
+        !Array.isArray(generatedContent.exercises)
+      ) {
+        generatedContent.exercises = [];
+        // If we have no valid exercises, return an error
+        if (generatedContent.exercises.length === 0) {
+          return NextResponse.json(
+            {
+              error:
+                "La génération n'a pas produit d'exercices valides. Veuillez réessayer.",
+              details: "No valid exercises found in the generated content.",
+            },
+            { status: 500 }
+          );
+        }
+      }
+
+      // Revalidate after fixes
+      const revalidation = GeneratedContentSchema.safeParse(generatedContent);
+      if (!revalidation.success) {
+        return NextResponse.json(
+          {
+            error:
+              "La structure du contenu généré reste invalide après corrections.",
+            details: revalidation.error,
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Normalize and clean up the exercises
+    if (
+      generatedContent.exercises &&
+      Array.isArray(generatedContent.exercises)
+    ) {
+      generatedContent.exercises = generatedContent.exercises.map(
+        (exercise: any, _index: number) => {
+          // Ensure question is a string
+          if (typeof exercise.question !== "string") {
+            exercise.question = String(exercise.question || "");
+          }
+
+          // Clean up the question to remove unnecessary mentions
+          exercise.question = exercise.question
+            .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
+            .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
+
+          // Ensure options are present and are strings
+          if (!exercise.options) {
+            exercise.options = {};
+            optionLetters.forEach((letter) => {
+              exercise.options[letter] = "";
+            });
+          } else {
+            // Ensure all requested options are present
+            optionLetters.forEach((letter) => {
+              if (!exercise.options[letter]) {
+                exercise.options[letter] = "";
+              } else if (typeof exercise.options[letter] !== "string") {
+                exercise.options[letter] = String(exercise.options[letter]);
+              }
+            });
+
+            // Remove any extra options beyond what was requested
+            Object.keys(exercise.options).forEach((key) => {
+              if (!optionLetters.includes(key)) {
+                delete exercise.options[key];
+              }
+            });
+          }
+
+          // Ensure answer is a string and is a valid option
+          if (!exercise.answer) {
+            exercise.answer = optionLetters[0]; // Default to first option
+          } else if (typeof exercise.answer !== "string") {
+            exercise.answer = String(exercise.answer);
+          }
+
+          // Ensure answer is among valid options
+          if (!optionLetters.includes(exercise.answer)) {
+            exercise.answer = optionLetters[0];
+          }
+
+          return exercise;
+        }
+      );
     }
 
     // Generate DOCX document
@@ -283,6 +474,7 @@ Retourner le contenu dans un format JSON structuré avec ces champs :
       title: `${sousTest}_${niveau}_${questionCount}_questions`,
       correctionType, // Pass the correction type to the DOCX generator
       randomExercises,
+      optionsCount, // Pass the options count to the DOCX generator
     };
     console.log("API: DOCX request payload prepared");
 
@@ -317,6 +509,8 @@ Retourner le contenu dans un format JSON structuré avec ces champs :
       question_count: questionCount,
       output_format: outputFormat,
       file_path: documentUrl,
+      llm_model: llmModel,
+      options_count: optionsCount,
     });
 
     const { data, error } = await supabase
@@ -330,6 +524,8 @@ Retourner le contenu dans un format JSON structuré avec ces champs :
         question_count: questionCount,
         output_format: outputFormat,
         file_path: documentUrl,
+        llm_model: llmModel,
+        options_count: optionsCount,
       })
       .select();
 

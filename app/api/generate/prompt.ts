@@ -26,13 +26,14 @@ Tu devras :
    - facile : Exercices avec raisonnements très simples, peu d'étapes.
    - moyen : Difficulté standard du TAGE MAGE, raisonnements en plusieurs étapes typiques.
    - difficile : Problèmes plus complexes, raisonnements plus subtils, pièges possibles.
-   - mixte : Un mélange varié de difficultés (approximativement 1/3 facile, 1/3 moyen, 1/3 difficile).
+   - très difficile : Problèmes très complexes, raisonnements avancés, pièges élaborés, niveau expert.
+   - mixte : Un mélange de difficultés selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile.
 
 3. Générer exactement le nombre total de questions demandé, en respectant la répartition entre variations et inédits.
 
 4. Pour chaque exercice, inclure :
    - Une question claire et directe, sans mentions comme "Variation X" ou "Exercice X"
-   - Des options à choix multiples (A, B, C, D, E)
+   - Des options à choix multiples (le nombre exact est spécifié dans le prompt)
    - La réponse correcte 
    - Une explication détaillée si demandée
 
@@ -55,6 +56,7 @@ Contraintes Cruciales :
 - Les exercices "inventés" doivent proposer des problèmes originaux tout en respectant la logique, le format et les concepts de la section.
 - Pour la partie Calcul spécifiquement, les calculs nécessaires doivent être réalisables sans calculatrice dans les conditions de l'examen.
 - IMPORTANT: Chaque énoncé de question doit être clair et direct. Ne jamais inclure de texte comme "Variation X", "Inédit X", ou "Exercice X" dans l'énoncé.
+- Adapter le nombre d'options selon ce qui est demandé dans le prompt, généralement entre 3 et 5 options.
 
 Format de sortie JSON attendu :
 {
@@ -67,10 +69,9 @@ Format de sortie JSON attendu :
         "A": "Option A",
         "B": "Option B",
         "C": "Option C",
-        "D": "Option D",
-        "E": "Option E"
+        ... (autres options selon le nombre demandé)
       },
-      "answer": "Lettre de la réponse correcte (A, B, C, D ou E)",
+      "answer": "Lettre de la réponse correcte",
       "explanation": "Explication détaillée du raisonnement (si demandé)",
       "shortExplanation": "Version courte de l'explication (si demandé)",
       "image": "{INSÉRER IMAGE}" // Uniquement pour les exercices nécessitant une visualisation

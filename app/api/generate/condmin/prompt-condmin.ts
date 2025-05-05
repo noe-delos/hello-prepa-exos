@@ -29,7 +29,8 @@ Tu devras :
    - facile : Exercices avec raisonnements très simples, peu d'étapes.
    - moyen : Difficulté standard du TAGE MAGE, raisonnements en plusieurs étapes typiques.
    - difficile : Problèmes plus complexes, raisonnements plus subtils, pièges possibles.
-   - mixte : Un mélange varié de difficultés (approximativement 1/3 facile, 1/3 moyen, 1/3 difficile).
+   - très difficile : Problèmes très complexes, raisonnements avancés, pièges élaborés, niveau expert.
+   - mixte : Un mélange de difficultés selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile.
 
 3. Générer exactement le nombre total de questions demandé, en respectant la répartition entre variations et inédits.
 

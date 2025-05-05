@@ -99,6 +99,8 @@ export default function QuestionGenerator({ user }: any) {
     ineditsCount: 10,
     correctionType: "sansCorrection",
     outputFormat: "docx",
+    llmModel: "openai", // New field for LLM model selection
+    optionsCount: 5, // New field for number of options (A-E by default)
   });
 
   // Calculated total question count (changes based on sous-test)
@@ -180,6 +182,8 @@ export default function QuestionGenerator({ user }: any) {
           correctionType: formState.correctionType,
           outputFormat: formState.outputFormat,
           questionCount: totalQuestionCount,
+          llmModel: formState.llmModel, // Pass selected LLM model
+          optionsCount: formState.optionsCount, // Pass number of options
         }),
       });
 
@@ -316,6 +320,65 @@ export default function QuestionGenerator({ user }: any) {
       <div className="flex justify-center items-center pb-3">
         <h1 className="text-[2rem] font-bold">{greeting}</h1>
       </div>
+
+      {/* New section for AI model selection */}
+      {user?.id === "3b087056-69cb-4ecc-a380-5e1509758a75" && (
+        <Card className="border-0 shadow-none">
+          <CardContent className="p-6 pt-0 shadow-none">
+            <h3 className="font-medium text-lg bg-zinc-100 p-3 py-2 rounded-lg">
+              Options beta
+            </h3>
+            <div className="pt-4 flex items-center gap-4">
+              <Select
+                value={formState.llmModel}
+                onValueChange={(value) =>
+                  setFormState((prev) => ({ ...prev, llmModel: value }))
+                }
+              >
+                <SelectTrigger className="w-[250px]">
+                  <SelectValue placeholder="Sélectionner un modèle" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai" className="flex items-center">
+                    <div className="flex items-center">
+                      <Icon icon="logos:openai-icon" className="mr-2 h-5 w-5" />
+                      <span>OpenAI (o3-mini)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="claude" className="flex items-center">
+                    <div className="flex items-center">
+                      <Icon
+                        icon="simple-icons:anthropic"
+                        className="mr-2 h-5 w-5"
+                      />
+                      <span>Claude (3.7 Sonnet)</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={formState.optionsCount.toString()}
+                onValueChange={(value) =>
+                  setFormState((prev) => ({
+                    ...prev,
+                    optionsCount: parseInt(value),
+                  }))
+                }
+              >
+                <SelectTrigger className="w-[250px]">
+                  <SelectValue placeholder="Nombre d'options" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 options (A-C)</SelectItem>
+                  <SelectItem value="4">4 options (A-D)</SelectItem>
+                  <SelectItem value="5">5 options (A-E)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-0 shadow-none">
         <CardContent className="p-6 pt-0 shadow-none">
@@ -492,7 +555,7 @@ export default function QuestionGenerator({ user }: any) {
                 </CardHeader>
                 <CardContent
                   className={cn(
-                    isPanelOpen ? "grid grid-cols-4 gap-2" : "space-y-3"
+                    isPanelOpen ? "grid grid-cols-5 gap-2" : "space-y-3"
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -577,6 +640,36 @@ export default function QuestionGenerator({ user }: any) {
                       onClick={() => handleNiveauChange("difficile")}
                     >
                       Difficile
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => handleNiveauChange("tresDifficile")}
+                    >
+                      <input
+                        type="radio"
+                        id="tresDifficile"
+                        name="niveau"
+                        value="tresDifficile"
+                        className="sr-only"
+                        checked={formState.niveau === "tresDifficile"}
+                        onChange={() => {}}
+                      />
+                      <div
+                        className={cn(
+                          "h-3 w-3 rounded-full",
+                          formState.niveau === "tresDifficile"
+                            ? "bg-[#FFE245]"
+                            : ""
+                        )}
+                      ></div>
+                    </div>
+                    <label
+                      htmlFor="tresDifficile"
+                      onClick={() => handleNiveauChange("tresDifficile")}
+                    >
+                      Très difficile
                     </label>
                   </div>
                   <div className="flex items-center gap-3">

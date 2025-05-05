@@ -39,21 +39,23 @@ Consignes pour les questions :
 - Au moins une question doit porter sur le message principal ou l'objectif du texte
 - Au moins une question doit porter sur une information implicite
 - Au moins une question doit exiger une inférence ou déduction
-- Les 5 options de réponse (A, B, C, D, E) doivent être plausibles, avec une seule réponse correcte
+- Les options de réponse doivent être plausibles, avec une seule réponse correcte
+- S'adapter au nombre d'options demandé (3, 4 ou 5 options)
 - Les distracteurs (mauvaises réponses) doivent être conçus pour tester la compréhension fine
 
 Niveau de difficulté :
 - facile : vocabulaire accessible, structure claire, questions directes, raisonnements explicites
 - moyen : vocabulaire plus riche, structure plus complexe, quelques questions d'inférence, implicites modérés
 - difficile : vocabulaire soutenu, structure sophistiquée, nombreuses questions d'inférence et déductions subtiles, ambiguïtés volontaires
-- mixte : mélange équilibré des trois niveaux de difficulté
+- très difficile : vocabulaire très élaboré, structure complexe, questions d'inférence avancées, ambiguïtés multiples, nuances subtiles
+- mixte : mélange de ces niveaux selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile
 
 Tâche : Pour chaque texte demandé :
 1. Choisir un format narratif distinct (article, reportage, interview reformulée, etc.)
 2. Générer un texte original selon les consignes ci-dessus
 3. Insérer les marqueurs "(Question X)" aux endroits stratégiques si nécessaire
 4. Créer exactement le nombre de questions demandé pour chaque texte
-5. Pour chaque question, fournir 5 options de réponse (A à E) dont une seule est correcte
+5. Pour chaque question, fournir le nombre d'options demandé (A, B, C, etc.) dont une seule est correcte
 6. Identifier clairement la réponse correcte pour chaque question
 7. Fournir une explication pour chaque réponse si demandé
 
@@ -70,11 +72,9 @@ Format de sortie JSON attendu :
           "options": {
             "A": "Option A",
             "B": "Option B",
-            "C": "Option C",
-            "D": "Option D",
-            "E": "Option E"
+            ... (autres options selon le nombre demandé)
           },
-          "answer": "Lettre de la réponse correcte (A, B, C, D ou E)",
+          "answer": "Lettre de la réponse correcte",
           "explanation": "Explication détaillée du raisonnement (si demandé)",
           "shortExplanation": "Version courte de l'explication (si demandé)"
         },
