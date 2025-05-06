@@ -39,7 +39,7 @@ const GenerateRequestSchema = z.object({
   questionCount: z.number().int().min(1).max(100),
   outputFormat: z.enum(["docx"]), // Uniquement DOCX pour l'instant
   llmModel: z.enum(["openai", "claude"]).default("openai"),
-  optionsCount: z.number().int().min(3).max(5).default(5),
+  optionsCount: z.number().int().min(2).max(5).default(5),
 });
 
 // Schema to validate the generated content structure
@@ -187,7 +187,9 @@ export async function POST(request: NextRequest) {
 
     // Prepare the options text based on optionsCount
     const optionsText =
-      optionsCount === 3
+      optionsCount === 2
+        ? "(A, B)"
+        : optionsCount === 3
         ? "(A, B, C)"
         : optionsCount === 4
         ? "(A, B, C, D)"

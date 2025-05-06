@@ -291,6 +291,14 @@ export default function QuestionGenerator({ user }: any) {
     }));
   };
 
+  const handleOptionsCountChange = (value: any) => {
+    const numValue = typeof value === "number" ? value : parseInt(value) || 2;
+    setFormState((prev) => ({
+      ...prev,
+      optionsCount: numValue,
+    }));
+  };
+
   // Déterminer les étiquettes des sliders en fonction du sous-test
   const getSliderLabels = () => {
     if (formState.sousTest === "comprehension") {
@@ -354,25 +362,6 @@ export default function QuestionGenerator({ user }: any) {
                       <span>Claude (3.7 Sonnet)</span>
                     </div>
                   </SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={formState.optionsCount.toString()}
-                onValueChange={(value) =>
-                  setFormState((prev) => ({
-                    ...prev,
-                    optionsCount: parseInt(value),
-                  }))
-                }
-              >
-                <SelectTrigger className="w-[250px]">
-                  <SelectValue placeholder="Nombre d'options" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="3">3 options (A-C)</SelectItem>
-                  <SelectItem value="4">4 options (A-D)</SelectItem>
-                  <SelectItem value="5">5 options (A-E)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -784,6 +773,43 @@ export default function QuestionGenerator({ user }: any) {
                 {formState.sousTest === "comprehension"
                   ? `Nombre total de questions : ${totalQuestionCount} (${formState.variationCount} textes × ${formState.ineditsCount} questions par texte)`
                   : `Nombre total de questions : ${totalQuestionCount}`}
+              </div>
+
+              {/* NEW: Options Count Slider */}
+              <div className="mt-6 space-y-3">
+                <Label htmlFor="options-count" className="text-base">
+                  Nombre d'options par question
+                </Label>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-4 items-center">
+                    <Slider
+                      id="options-slider"
+                      value={[formState.optionsCount]}
+                      max={5}
+                      min={2}
+                      step={1}
+                      className="w-full"
+                      onValueChange={(value) =>
+                        handleOptionsCountChange(value[0])
+                      }
+                    />
+                    <Input
+                      id="options-count"
+                      type="number"
+                      min={2}
+                      max={5}
+                      value={formState.optionsCount}
+                      onChange={(e) => handleOptionsCountChange(e.target.value)}
+                      className="w-16 text-center"
+                    />
+                  </div>
+                  <div className="text-sm text-gray-500 text-center">
+                    {formState.optionsCount === 2 && "2 options (A-B)"}
+                    {formState.optionsCount === 3 && "3 options (A-C)"}
+                    {formState.optionsCount === 4 && "4 options (A-D)"}
+                    {formState.optionsCount === 5 && "5 options (A-E)"}
+                  </div>
+                </div>
               </div>
             </div>
 

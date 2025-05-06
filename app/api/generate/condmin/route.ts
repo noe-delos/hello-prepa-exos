@@ -34,7 +34,7 @@ const GenerateRequestSchema = z.object({
   questionCount: z.number().int().min(1).max(100),
   outputFormat: z.enum(["docx"]), // Uniquement DOCX pour l'instant
   llmModel: z.enum(["openai", "claude"]).default("openai"),
-  optionsCount: z.number().int().min(3).max(5).default(5),
+  optionsCount: z.number().int().min(2).max(5).default(5),
 });
 
 // Schema to validate the generated content structure
