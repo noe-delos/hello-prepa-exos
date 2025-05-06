@@ -717,7 +717,7 @@ function generateDocument(
   }
 }
 
-// Fonction pour générer les paragraphes de questions
+// Fonction pour générer les paragraphes de questions avec pagination améliorée
 function generateQuestionParagraphs(
   exercises: any,
   correctionType = "sansCorrection"
@@ -729,18 +729,45 @@ function generateQuestionParagraphs(
     // Log des informations sur les exercices
     console.log(`DOCX API: Processing ${exercises.length} exercises`);
 
+    // Calculate total number of pages needed
+    const totalExercises = exercises.length;
+    const firstPageExercises = 3;
+    const exercisesPerSubsequentPage = 4;
+
+    // Calculate how many complete pages we'll have after the first page
+    const completeSubsequentPages = Math.floor(
+      (totalExercises - firstPageExercises) / exercisesPerSubsequentPage
+    );
+
+    // Calculate remaining exercises for the last page
+    const remainingExercises =
+      (totalExercises - firstPageExercises) % exercisesPerSubsequentPage;
+
     // Loop through exercises
     exercises.forEach((exercise: any, index: number) => {
       console.log(`DOCX API: Building exercise ${index + 1}`);
 
-      // MODIFIED: Put 3 exercises on the first page, then 4 per page after that
-      // This means page breaks at indices 3, 7, 11, 15, etc.
-      // First page: indices 0, 1, 2
-      // Second page: indices 3, 4, 5, 6
-      // Third page: indices 7, 8, 9, 10
-      // And so on...
-      const needsPageBreak =
-        index === 3 || (index > 3 && (index - 3) % 4 === 0);
+      // Improved page break logic to prevent blank pages
+      let needsPageBreak = false;
+
+      if (index === firstPageExercises) {
+        // First page break after the initial 3 exercises
+        needsPageBreak = true;
+      } else if (index > firstPageExercises) {
+        // For remaining exercises, calculate if we need a page break
+        const positionAfterFirstPage = index - firstPageExercises;
+
+        // Only insert page breaks for complete pages, avoid page break that would create a nearly empty last page
+        if (positionAfterFirstPage % exercisesPerSubsequentPage === 0) {
+          // Don't add page break for the very last page if it would have just 1-2 exercises
+          // This prevents creating pages with too few exercises
+          const isLastPageWithFewExercises =
+            positionAfterFirstPage / exercisesPerSubsequentPage ===
+              completeSubsequentPages && remainingExercises <= 2;
+
+          needsPageBreak = !isLastPageWithFewExercises;
+        }
+      }
 
       // Question text
       children.push(
@@ -894,7 +921,16 @@ function generateQuestionParagraphs(
       children.push(new docx.Paragraph({ text: "" }));
     });
 
-    // No extra paragraphs at the end to avoid blank pages
+    // Remove excessive trailing empty paragraphs if they exist
+    // This helps prevent blank pages at the end
+    while (
+      children.length > 2 &&
+      children[children.length - 1].text === "" &&
+      children[children.length - 2].text === ""
+    ) {
+      children.pop();
+    }
+
     console.log("DOCX API: Question paragraphs generation completed");
     return children;
   } catch (error) {
