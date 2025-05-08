@@ -1,10 +1,10 @@
-// src/app/api/generate/condmin/route.ts
+// src/app/api/generate/calcul/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { systemPrompt } from "./prompt-condmin"; // Importation du prompt spécifique
+import { systemPrompt } from "./prompt-calcul"; // Import the calcul-specific prompt
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -19,7 +19,7 @@ const anthropic = new Anthropic({
 // Define validation schema for request body
 const GenerateRequestSchema = z.object({
   userId: z.string().uuid(),
-  sousTest: z.literal("condMinimales"), // Limité uniquement à condMinimales
+  sousTest: z.literal("calcul"), // Limited to calcul only
   niveau: z.enum(["facile", "moyen", "difficile", "tresDifficile", "mixte"]),
   variationCount: z.number().int().min(0).max(50),
   ineditsCount: z.number().int().min(0).max(50),
@@ -29,7 +29,7 @@ const GenerateRequestSchema = z.object({
     "correctionDetaillee",
   ]),
   questionCount: z.number().int().min(1).max(100),
-  outputFormat: z.enum(["docx"]), // Uniquement DOCX pour l'instant
+  outputFormat: z.enum(["docx"]), // DOCX only for now
   llmModel: z.enum(["openai", "claude"]).default("openai"),
   optionsCount: z.number().int().min(2).max(5).default(5),
   selectedThemes: z.array(z.string()).min(1), // At least one theme must be selected
@@ -42,30 +42,30 @@ const GeneratedContentSchema = z.object({
   exercises: z.array(
     z.object({
       question: z.string(),
-      info1: z.string(),
-      info2: z.string(),
+      options: z.record(z.string(), z.string()),
       answer: z.string(),
       explanation: z.string().optional(),
       shortExplanation: z.string().optional(),
-      theme: z.string().optional(), // Optional theme field
+      image: z.string().optional(),
+      theme: z.string().optional(),
     })
   ),
   conclusion: z.string(),
 });
 
 export async function POST(request: NextRequest) {
-  console.log("API CondMin: Generate endpoint called");
+  console.log("API Calcul: Generate endpoint called");
   try {
     // Get and validate request body
-    console.log("API CondMin: Parsing request body");
+    console.log("API Calcul: Parsing request body");
     const body = await request.json();
-    console.log("API CondMin: Request body received:", JSON.stringify(body));
+    console.log("API Calcul: Request body received:", JSON.stringify(body));
 
     const validationResult = GenerateRequestSchema.safeParse(body);
 
     if (!validationResult.success) {
       console.error(
-        "API CondMin: Validation error:",
+        "API Calcul: Validation error:",
         JSON.stringify(validationResult.error)
       );
       return NextResponse.json(
@@ -88,37 +88,34 @@ export async function POST(request: NextRequest) {
       selectedThemes,
     } = validationResult.data;
 
-    console.log(
-      "API CondMin: Request validated successfully with parameters:",
-      {
-        userId,
-        sousTest,
-        niveau,
-        variationCount,
-        ineditsCount,
-        correctionType,
-        questionCount,
-        outputFormat,
-        llmModel,
-        optionsCount,
-        selectedThemes,
-      }
-    );
+    console.log("API Calcul: Request validated successfully with parameters:", {
+      userId,
+      sousTest,
+      niveau,
+      variationCount,
+      ineditsCount,
+      correctionType,
+      questionCount,
+      outputFormat,
+      llmModel,
+      optionsCount,
+      selectedThemes,
+    });
 
-    console.log("API CondMin: Initializing Supabase admin client");
+    console.log("API Calcul: Initializing Supabase admin client");
     // Create Supabase client
     const supabase = createAdminClient();
-    console.log("API CondMin: Supabase admin client created successfully");
+    console.log("API Calcul: Supabase admin client created successfully");
 
     // Retrieve random exercises from the database based on selected themes
     console.log(
-      "API CondMin: Fetching random exercises from database by themes"
+      "API Calcul: Fetching random exercises from database by themes"
     );
 
     // Build the query based on selected themes
-    let query = supabase.from("questions_condMinimales").select("*").limit(20);
+    let query = supabase.from("questions_calcul").select("*").limit(20);
 
-    // Add theme filter if specific themes are selected
+    // Add theme filter if specific themes are selected (not "all")
     if (selectedThemes.length > 0) {
       query = query.in("Thème", selectedThemes);
     }
@@ -130,7 +127,7 @@ export async function POST(request: NextRequest) {
     );
 
     if (fetchError) {
-      console.error("API CondMin: Error fetching exercises:", fetchError);
+      console.error("API Calcul: Error fetching exercises:", fetchError);
       return NextResponse.json(
         { error: "Failed to fetch exercises", details: fetchError },
         { status: 500 }
@@ -138,7 +135,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `API CondMin: Successfully fetched ${randomExercises.length} exercises`
+      `API Calcul: Successfully fetched ${randomExercises.length} exercises`
     );
 
     // No exercises found with selected themes
@@ -152,12 +149,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prépare les exemples d'exercices pour le prompt
+    // Prepare exercise examples for the prompt
     const exercisesExamples = randomExercises.map((exercise) => ({
       question: exercise.Énoncé,
-      info1: exercise.Info1,
-      info2: exercise.Info2,
+      options: {
+        A: exercise.A,
+        B: exercise.B,
+        C: exercise.C,
+        D: exercise.D,
+        E: exercise.E,
+      },
       answer: exercise.Réponse,
+      image: exercise.Image === "TRUE" ? "{INSÉRER IMAGE}" : null,
       theme:
         exercise.Thème && exercise.Thème !== "EMPTY" ? exercise.Thème : null,
     }));
@@ -200,6 +203,21 @@ export async function POST(request: NextRequest) {
     // For "mixte" niveau, we'll use "moyen" for the database to maintain compatibility
     const dbNiveau = niveau === "mixte" ? "moyen" : niveau;
 
+    // Prepare the options text based on optionsCount
+    const optionsText =
+      optionsCount === 2
+        ? "(A, B)"
+        : optionsCount === 3
+        ? "(A, B, C)"
+        : optionsCount === 4
+        ? "(A, B, C, D)"
+        : "(A, B, C, D, E)";
+
+    // Convert optionsCount to actual option letters
+    const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+      String.fromCharCode(65 + i)
+    ); // A=65, B=66, etc.
+
     // Create the difficulty distribution text for mixte niveau
     const mixteDistributionText =
       niveau === "mixte"
@@ -212,39 +230,33 @@ export async function POST(request: NextRequest) {
         ? `sur les thèmes suivants : ${selectedThemes.join(", ")}`
         : "sur tous les thèmes";
 
-    // Note: For CondMin, we always use 5 options regardless of optionsCount
-    // as it has a fixed format with 5 specific options
-
     // Call LLM to generate exercises
     const prompt = `Générer ${questionCount} exercices ${
       niveau === "mixte"
         ? "de niveau varié " + mixteDistributionText
         : `de niveau ${niveau}`
-    } pour le sous-test "Conditions Minimales" ${distributionText} ${themesText}. 
+    } 
+pour le sous-test "calcul" ${distributionText} ${themesText}. 
 Fournir ces exercices ${correctionDescription}.
 
 Voici ${
       exercisesExamples.length
-    } exemples d'exercices de Conditions Minimales pour t'inspirer:
+    } exemples d'exercices du type calcul pour t'inspirer:
 ${JSON.stringify(exercisesExamples, null, 2)}
 
-RAPPEL IMPORTANT: Le format des exercices de Conditions Minimales est spécifique:
-- Une question principale
-- Deux informations numérotées (1) et (2) 
-- La réponse identifie quelle(s) information(s) est/sont suffisante(s) pour répondre à la question
-
 Pour chaque exercice, inclure :
-1. Une question claire et directe
-2. Les deux informations (info1 et info2)
-3. La réponse correcte (lettre A, B, C, D ou E)
+1. Une question claire sous forme de texte. 
+   IMPORTANT: La question doit être directe et concise, sans mentions comme "Variation X" ou "Exercice X".
+2. Des options à choix multiples ${optionsText} - IMPORTANT: Fournir exactement ${optionsCount} options
+3. La réponse correcte (lettre ${optionLetters.join(", ")})
 4. Le thème de l'exercice (doit être l'un des thèmes suivants: ${selectedThemes.join(
       ", "
     )})
 ${
   correctionType !== "sansCorrection"
     ? correctionType === "correctionCourte"
-      ? "5. Une courte explication (shortExplanation) qui indique brièvement le raisonnement pour déterminer la suffisance des informations"
-      : "5. Une explication détaillée (explanation) qui analyse en profondeur la suffisance de chaque information"
+      ? "5. Une courte explication (shortExplanation) qui indique brièvement la méthode de résolution"
+      : "5. Une explication détaillée (explanation) qui donne la solution complète pas à pas"
     : ""
 }
 
@@ -255,19 +267,22 @@ ${
 }
 {
   "title": "Un titre pour le document",
-  "introduction": "Texte d'introduction bref qui explique le principe des Conditions Minimales",
+  "introduction": "Texte d'introduction bref",
   "exercises": [
     {
-      "question": "Énoncé de la question principale (ex: Le nombre n est-il pair ?)",
-      "info1": "Information 1 (ex: n est un cube.)",
-      "info2": "Information 2 (ex: n + 1 est divisible par 4.)",
-      "answer": "Lettre de la réponse correcte (A, B, C, D ou E)",
+      "question": "Énoncé de la question 1",
+      "options": {
+        ${optionLetters
+          .map((letter) => `"${letter}": "Option ${letter}"`)
+          .join(",\n        ")}
+      },
+      "answer": "Lettre de la réponse correcte",
       "theme": "Le thème de l'exercice (parmi les thèmes spécifiés)",
       ${
         correctionType !== "sansCorrection"
           ? correctionType === "correctionCourte"
-            ? `"shortExplanation": "Version courte de l'explication"`
-            : `"explanation": "Explication détaillée du raisonnement"`
+            ? `"shortExplanation": "Explication courte"`
+            : `"explanation": "Explication détaillée"`
           : ""
       }
     }
@@ -282,7 +297,7 @@ ${
     : ""
 }`;
 
-    console.log(`API CondMin: Calling ${llmModel} with prompt`);
+    console.log(`API Calcul: Calling ${llmModel} with prompt`);
 
     let generatedContent;
     let rawResponse = "";
@@ -301,7 +316,7 @@ ${
         response_format: { type: "json_object" },
       });
 
-      console.log("API CondMin: OpenAI response received successfully");
+      console.log("API Calcul: OpenAI response received successfully");
       rawResponse = completion.choices[0].message.content || "{}";
     } else {
       // Use Claude with thinking enabled
@@ -319,14 +334,14 @@ ${
         },
       });
 
-      console.log("API CondMin: Claude response received successfully");
+      console.log("API Calcul: Claude response received successfully");
       rawResponse = msg.content[1].text || "{}";
     }
 
     // Additional processing for Claude responses to ensure valid JSON
     if (llmModel === "claude") {
       // Try to extract JSON from Claude's response (it might contain markdown code blocks or additional text)
-      console.log("API CondMin: Processing Claude response to extract JSON");
+      console.log("API Calcul: Processing Claude response to extract JSON");
 
       // Check if response is wrapped in a code block
       const jsonMatch = rawResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -340,16 +355,16 @@ ${
         rawResponse = jsonObjectMatch[0];
       }
 
-      console.log("API CondMin: Claude response processed");
+      console.log("API Calcul: Claude response processed");
     }
 
     try {
       // Parse the raw JSON response
       generatedContent = JSON.parse(rawResponse);
-      console.log("API CondMin: Parsed generated content successfully");
+      console.log("API Calcul: Parsed generated content successfully");
     } catch (parseError) {
-      console.error("API CondMin: Error parsing LLM response:", parseError);
-      console.log("API CondMin: Raw LLM response:", rawResponse);
+      console.error("API Calcul: Error parsing LLM response:", parseError);
+      console.log("API Calcul: Raw LLM response:", rawResponse);
       return NextResponse.json(
         {
           error:
@@ -365,19 +380,19 @@ ${
       GeneratedContentSchema.safeParse(generatedContent);
     if (!contentValidation.success) {
       console.error(
-        "API CondMin: Generated content validation error:",
+        "API Calcul: Generated content validation error:",
         JSON.stringify(contentValidation.error)
       );
 
       // Attempt to fix the content structure
-      console.log("API CondMin: Attempting to fix content structure");
+      console.log("API Calcul: Attempting to fix content structure");
 
       // Ensure all required fields are present
       if (!generatedContent.title) {
-        generatedContent.title = `Exercices de Conditions Minimales TAGE MAGE - ${niveau}`;
+        generatedContent.title = `Exercices de calcul TAGE MAGE - ${niveau}`;
       }
       if (!generatedContent.introduction) {
-        generatedContent.introduction = `Voici une série d'exercices pour vous préparer à la section Conditions Minimales du TAGE MAGE. Pour chaque question, déterminez quelle(s) information(s) est/sont suffisante(s) pour y répondre.`;
+        generatedContent.introduction = `Voici une série d'exercices pour vous préparer à la section calcul du TAGE MAGE.`;
       }
       if (!generatedContent.conclusion) {
         generatedContent.conclusion = "Fin des exercices. Bonne préparation !";
@@ -390,14 +405,16 @@ ${
       ) {
         generatedContent.exercises = [];
         // If we have no valid exercises, return an error
-        return NextResponse.json(
-          {
-            error:
-              "La génération n'a pas produit d'exercices valides. Veuillez réessayer.",
-            details: "No valid exercises found in the generated content.",
-          },
-          { status: 500 }
-        );
+        if (generatedContent.exercises.length === 0) {
+          return NextResponse.json(
+            {
+              error:
+                "La génération n'a pas produit d'exercices valides. Veuillez réessayer.",
+              details: "No valid exercises found in the generated content.",
+            },
+            { status: 500 }
+          );
+        }
       }
 
       // Revalidate after fixes
@@ -431,29 +448,40 @@ ${
             .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
             .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
 
-          // Ensure info1 and info2 are present and are strings
-          if (!exercise.info1) {
-            exercise.info1 = "Information 1 manquante";
-          } else if (typeof exercise.info1 !== "string") {
-            exercise.info1 = String(exercise.info1);
+          // Ensure options are present and are strings
+          if (!exercise.options) {
+            exercise.options = {};
+            optionLetters.forEach((letter) => {
+              exercise.options[letter] = "";
+            });
+          } else {
+            // Ensure all requested options are present
+            optionLetters.forEach((letter) => {
+              if (!exercise.options[letter]) {
+                exercise.options[letter] = "";
+              } else if (typeof exercise.options[letter] !== "string") {
+                exercise.options[letter] = String(exercise.options[letter]);
+              }
+            });
+
+            // Remove any extra options beyond what was requested
+            Object.keys(exercise.options).forEach((key) => {
+              if (!optionLetters.includes(key)) {
+                delete exercise.options[key];
+              }
+            });
           }
 
-          if (!exercise.info2) {
-            exercise.info2 = "Information 2 manquante";
-          } else if (typeof exercise.info2 !== "string") {
-            exercise.info2 = String(exercise.info2);
-          }
-
-          // Ensure answer is a string
+          // Ensure answer is a string and is a valid option
           if (!exercise.answer) {
-            exercise.answer = "A"; // Default answer
+            exercise.answer = optionLetters[0]; // Default to first option
           } else if (typeof exercise.answer !== "string") {
             exercise.answer = String(exercise.answer);
           }
 
-          // Ensure answer is a valid option (A-E)
-          if (!["A", "B", "C", "D", "E"].includes(exercise.answer)) {
-            exercise.answer = "A";
+          // Ensure answer is among valid options
+          if (!optionLetters.includes(exercise.answer)) {
+            exercise.answer = optionLetters[0];
           }
 
           // Ensure theme is present and valid
@@ -473,9 +501,9 @@ ${
     }
 
     // Generate DOCX document
-    console.log("API CondMin: Generating DOCX document");
-    const docxEndpoint = `${request.nextUrl.origin}/api/generate/condmin/docx`;
-    console.log("API CondMin: Calling DOCX endpoint:", docxEndpoint);
+    console.log("API Calcul: Generating DOCX document");
+    const docxEndpoint = `${request.nextUrl.origin}/api/generate/docx`;
+    console.log("API Calcul: Calling DOCX endpoint:", docxEndpoint);
 
     const docxPayload = {
       userId,
@@ -484,9 +512,9 @@ ${
       correctionType,
       randomExercises,
       optionsCount,
-      selectedThemes, // Pass selected themes to DOCX generator
+      selectedThemes, // Pass the selected themes to the DOCX generator
     };
-    console.log("API CondMin: DOCX request payload prepared");
+    console.log("API Calcul: DOCX request payload prepared");
 
     const response = await fetch(docxEndpoint, {
       method: "POST",
@@ -497,26 +525,26 @@ ${
     });
 
     console.log(
-      "API CondMin: DOCX generation response status:",
+      "API Calcul: DOCX generation response status:",
       response.status
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(
-        "API CondMin: Failed to generate DOCX. Response:",
+        "API Calcul: Failed to generate DOCX. Response:",
         errorText
       );
       throw new Error(`Failed to generate DOCX: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log("API CondMin: DOCX generated successfully:", result);
+    console.log("API Calcul: DOCX generated successfully:", result);
     const documentUrl = result.url;
     const fileId = result.id;
 
     // Save to generations table using the original schema structure
-    console.log("API CondMin: Saving generation to database:", {
+    console.log("API Calcul: Saving generation to database:", {
       user_id: userId,
       sous_test: sousTest,
       niveau: dbNiveau,
@@ -527,7 +555,7 @@ ${
       file_path: documentUrl,
       llm_model: llmModel,
       options_count: optionsCount,
-      selected_themes: selectedThemes,
+      selected_themes: selectedThemes, // Add selected themes to the database
     });
 
     const { data, error } = await supabase
@@ -543,28 +571,28 @@ ${
         file_path: documentUrl,
         llm_model: llmModel,
         options_count: optionsCount,
-        selected_themes: selectedThemes, // Add selected themes to the database
+        selected_themes: selectedThemes, // New field in the database
       })
       .select();
 
     if (error) {
-      console.error("API CondMin: Error saving generation:", error);
+      console.error("API Calcul: Error saving generation:", error);
       return NextResponse.json(
         { error: "Failed to save generation", details: error },
         { status: 500 }
       );
     }
 
-    console.log("API CondMin: Generation saved successfully:", data);
+    console.log("API Calcul: Generation saved successfully:", data);
 
-    console.log("API CondMin: Request completed successfully");
+    console.log("API Calcul: Request completed successfully");
     return NextResponse.json({
       success: true,
       url: documentUrl,
       fileId,
     });
   } catch (error) {
-    console.error("API CondMin: Generation error:", error);
+    console.error("API Calcul: Generation error:", error);
     return NextResponse.json(
       {
         error: "Internal Server Error",

@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable react/no-unescaped-entities */
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -19,6 +15,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox"; // Add import for checkbox component
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -27,6 +24,49 @@ import ShimmeringTitle from "../ui/animated-shiny-text";
 import confetti from "canvas-confetti";
 import { Icon } from "@iconify/react";
 import { revalidateHistoryList } from "@/actions/list";
+
+// Define theme options for each subtest
+const CALCUL_THEMES = [
+  "Probabilité",
+  "Proportionnalité simple et multiple",
+  "Géométrie",
+  "Carrés / Cubes / Identités remarquables",
+  "Partage du temps de travail",
+  "Nombres premiers / PPCM / PGCD",
+  "Calcul mental",
+  "Nombre de rencontres et Nombre de salutations",
+  "Base 10, 100 et 1000",
+  "Tableaux",
+  "Combinaisons",
+  "Suites arithmétiques / Suites géométriques",
+  "Puissances, pourcentages et ratios",
+  "Équations / Systèmes d'équations",
+  "Unités et conversion",
+  "Cas de croisement et cas de rattrapage",
+  "Vitesse, Distance, Temps (VDT)",
+  "Intérêts",
+  "Les arbres",
+  "Barycentre",
+];
+
+const CONDMIN_THEMES = [
+  "Pourcentages",
+  "Partage du temps de travail",
+  "Théorèmes de Thalès et de Pythagore",
+  "Centaines, dizaines, unités",
+  "Proportionnalité multiple",
+  "Liens de parenté",
+  "Proportionnalité simple",
+  "Autre",
+  "Cas de croisement",
+  "Capital et intérêts",
+  "Cas de rattrapage",
+  "Équations et inéquations",
+  "Moyennes",
+  "Probabilités",
+  "Parité",
+  "Vitesse, distance et temps",
+];
 
 // Custom loading toast component
 const GenerationProgressToast = ({ questionCount }: any) => {
@@ -102,7 +142,22 @@ export default function QuestionGenerator({ user }: any) {
     outputFormat: "docx",
     llmModel: "openai", // New field for LLM model selection
     optionsCount: 5, // New field for number of options (A-E by default)
+    selectedThemes: [] as string[], // New field for theme selection
   });
+
+  // Determine which themes to display based on sousTest
+  const themes =
+    formState.sousTest === "calcul"
+      ? CALCUL_THEMES
+      : formState.sousTest === "condMinimales"
+      ? CONDMIN_THEMES
+      : [];
+
+  // Group themes for better display (4 columns)
+  const groupedThemes = [];
+  for (let i = 0; i < themes.length; i += 4) {
+    groupedThemes.push(themes.slice(i, i + 4));
+  }
 
   // Calculated total question count (changes based on sous-test)
   const getTotalQuestionCount = () => {
@@ -133,6 +188,45 @@ export default function QuestionGenerator({ user }: any) {
     }
   }, []);
 
+  // Theme handling functions
+  const handleThemeChange = (theme: string) => {
+    setFormState((prev) => {
+      if (prev.selectedThemes.includes(theme)) {
+        return {
+          ...prev,
+          selectedThemes: prev.selectedThemes.filter((t) => t !== theme),
+        };
+      } else {
+        return {
+          ...prev,
+          selectedThemes: [...prev.selectedThemes, theme],
+        };
+      }
+    });
+  };
+
+  const selectAllThemes = () => {
+    setFormState((prev) => ({
+      ...prev,
+      selectedThemes: [...themes],
+    }));
+  };
+
+  const clearAllThemes = () => {
+    setFormState((prev) => ({
+      ...prev,
+      selectedThemes: [],
+    }));
+  };
+
+  // Reset selected themes when changing sousTest
+  useEffect(() => {
+    setFormState((prev) => ({
+      ...prev,
+      selectedThemes: [],
+    }));
+  }, [formState.sousTest]);
+
   // Save preferences to localStorage and trigger generation
   const generateDocument = async () => {
     if (!user || !user.id) {
@@ -142,6 +236,16 @@ export default function QuestionGenerator({ user }: any) {
 
     if (totalQuestionCount === 0) {
       toast.error("Veuillez sélectionner au moins une question");
+      return;
+    }
+
+    // Validate theme selection for calcul and condMinimales
+    if (
+      (formState.sousTest === "calcul" ||
+        formState.sousTest === "condMinimales") &&
+      formState.selectedThemes.length === 0
+    ) {
+      toast.error("Veuillez sélectionner au moins un thème");
       return;
     }
 
@@ -164,6 +268,8 @@ export default function QuestionGenerator({ user }: any) {
         apiEndpoint = "/api/generate/condmin";
       } else if (formState.sousTest === "comprehension") {
         apiEndpoint = "/api/generate/comprehension";
+      } else if (formState.sousTest === "calcul") {
+        apiEndpoint = "/api/generate/calcul"; // New endpoint for calcul
       } else {
         apiEndpoint = "/api/generate";
       }
@@ -183,8 +289,9 @@ export default function QuestionGenerator({ user }: any) {
           correctionType: formState.correctionType,
           outputFormat: formState.outputFormat,
           questionCount: totalQuestionCount,
-          llmModel: formState.llmModel, // Pass selected LLM model
-          optionsCount: formState.optionsCount, // Pass number of options
+          llmModel: formState.llmModel,
+          optionsCount: formState.optionsCount,
+          selectedThemes: formState.selectedThemes, // Pass selected themes
         }),
       });
 
@@ -266,9 +373,14 @@ export default function QuestionGenerator({ user }: any) {
         sousTest: value,
         variationCount: 2, // Nombre de textes par défaut
         ineditsCount: 5, // Nombre de questions par texte par défaut
+        selectedThemes: [], // Reset selected themes
       }));
     } else {
-      setFormState((prev) => ({ ...prev, sousTest: value }));
+      setFormState((prev) => ({
+        ...prev,
+        sousTest: value,
+        selectedThemes: [], // Reset selected themes
+      }));
     }
   };
 
@@ -318,6 +430,10 @@ export default function QuestionGenerator({ user }: any) {
   };
 
   const sliderLabels = getSliderLabels();
+
+  // Show theme selection only for calcul and condMinimales
+  const showThemeSelection =
+    formState.sousTest === "calcul" || formState.sousTest === "condMinimales";
 
   return (
     <div
@@ -516,9 +632,9 @@ export default function QuestionGenerator({ user }: any) {
                     <div className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors">
                       <input
                         type="radio"
-                        id="comprehension"
+                        id="expression"
                         name="sous-test"
-                        value="comprehension"
+                        value="expression"
                         className="sr-only"
                         onChange={() => {}}
                         disabled
@@ -526,7 +642,7 @@ export default function QuestionGenerator({ user }: any) {
                       <div className={cn("h-3 w-3 rounded-full")}></div>
                     </div>
                     <label
-                      htmlFor="comprehension"
+                      htmlFor="expression"
                       className="cursor-not-allowed opacity-50"
                     >
                       Expression
@@ -694,6 +810,64 @@ export default function QuestionGenerator({ user }: any) {
               </Card>
             </div>
 
+            {/* NEW: Theme Selection Section for calcul and condMinimales */}
+            {showThemeSelection && (
+              <div className="space-y-6">
+                <h3 className="font-medium text-lg bg-zinc-100 p-3 py-2 rounded-lg">
+                  Thèmes
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={selectAllThemes}
+                      className="text-xs"
+                    >
+                      Tout sélectionner
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={clearAllThemes}
+                      className="text-xs"
+                    >
+                      Tout désélectionner
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {groupedThemes.map((group, groupIndex) => (
+                      <div key={groupIndex}>
+                        {group.map((theme) => (
+                          <div
+                            key={theme}
+                            className="flex items-center space-x-2 py-1"
+                          >
+                            <Checkbox
+                              id={`theme-${theme}`}
+                              checked={formState.selectedThemes.includes(theme)}
+                              onCheckedChange={() => handleThemeChange(theme)}
+                              className="rounded-sm"
+                            />
+                            <label
+                              htmlFor={`theme-${theme}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                              {theme}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-center text-sm">
+                    {formState.selectedThemes.length} thème(s) sélectionné(s)
+                    sur {themes.length}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Questions distribution section */}
             <div className="space-y-6">
               <h3 className="font-medium text-lg bg-zinc-100 p-3 py-2 rounded-lg">
@@ -776,7 +950,7 @@ export default function QuestionGenerator({ user }: any) {
                   : `Nombre total de questions : ${totalQuestionCount}`}
               </div>
 
-              {/* NEW: Options Count Slider */}
+              {/* Options Count Slider */}
               <div className="mt-6 space-y-3">
                 <Label htmlFor="options-count" className="text-base">
                   Nombre d'options par question
@@ -790,6 +964,7 @@ export default function QuestionGenerator({ user }: any) {
                       min={2}
                       step={1}
                       className="w-full"
+                      disabled={formState.sousTest === "condMinimales"} // Disable for condMinimales as it has fixed 5 options
                       onValueChange={(value) =>
                         handleOptionsCountChange(value[0])
                       }
@@ -800,15 +975,22 @@ export default function QuestionGenerator({ user }: any) {
                       min={2}
                       max={5}
                       value={formState.optionsCount}
+                      disabled={formState.sousTest === "condMinimales"} // Disable for condMinimales as it has fixed 5 options
                       onChange={(e) => handleOptionsCountChange(e.target.value)}
                       className="w-16 text-center"
                     />
                   </div>
                   <div className="text-sm text-gray-500 text-center">
-                    {formState.optionsCount === 2 && "2 options (A-B)"}
-                    {formState.optionsCount === 3 && "3 options (A-C)"}
-                    {formState.optionsCount === 4 && "4 options (A-D)"}
-                    {formState.optionsCount === 5 && "5 options (A-E)"}
+                    {formState.sousTest === "condMinimales" ? (
+                      "Les Conditions Minimales utilisent toujours 5 options (A-E)"
+                    ) : (
+                      <>
+                        {formState.optionsCount === 2 && "2 options (A-B)"}
+                        {formState.optionsCount === 3 && "3 options (A-C)"}
+                        {formState.optionsCount === 4 && "4 options (A-D)"}
+                        {formState.optionsCount === 5 && "5 options (A-E)"}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -885,7 +1067,11 @@ export default function QuestionGenerator({ user }: any) {
                 size="lg"
                 className="px-16 py-6 text-lg font-medium bg-amber-500 hover:bg-amber-600"
                 onClick={generateDocument}
-                disabled={isGenerating || totalQuestionCount === 0}
+                disabled={
+                  isGenerating ||
+                  totalQuestionCount === 0 ||
+                  (showThemeSelection && formState.selectedThemes.length === 0)
+                }
               >
                 {isGenerating ? "Génération en cours..." : "Générer"}
               </Button>
