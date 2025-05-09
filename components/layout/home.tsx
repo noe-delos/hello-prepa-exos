@@ -144,7 +144,7 @@ export default function QuestionGenerator({ user }: any) {
     ineditsCount: 10,
     correctionType: "sansCorrection",
     outputFormat: "docx",
-    llmModel: "openai", // New field for LLM model selection
+    llmModel: "claude", // New field for LLM model selection
     optionsCount: 5, // New field for number of options (A-E by default)
     selectedThemes: [] as string[], // New field for theme selection
   });
