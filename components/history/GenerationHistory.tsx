@@ -86,7 +86,7 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
         .from("generations")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(100);
 
       if (error) throw error;
       return data as Generation[];
