@@ -55,6 +55,7 @@ Contraintes Cruciales :
 - L'enrobage (contexte, noms, valeurs) des exercices de type "variation" doit être entièrement modifié par rapport aux exemples fournis, tout en conservant la mécanique de résolution sous-jacente identique.
 - Les exercices "inventés" doivent proposer des problèmes originaux tout en respectant la logique, le format et les concepts de la section.
 - Pour la partie Calcul spécifiquement, les calculs nécessaires doivent être réalisables sans calculatrice dans les conditions de l'examen.
+- Toujours un espace à la fin de l'énoncé de la question avant le "?". Donc "[question] ?"
 - IMPORTANT: Chaque énoncé de question doit être clair et direct. Ne jamais inclure de texte comme "Variation X", "Inédit X", ou "Exercice X" dans l'énoncé.
 - Adapter le nombre d'options selon ce qui est demandé dans le prompt, généralement entre 3 et 5 options.
 

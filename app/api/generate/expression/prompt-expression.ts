@@ -57,6 +57,7 @@ Contraintes Cruciales :
 - Le champ replacementCount doit indiquer précisément le nombre de mots à remplacer (0, 1, 2 ou 3).
 - Pour chaque exercice avec replacementCount > 0, tu dois fournir un tableau "replacements" contenant les mots exacts à remplacer tels qu'ils apparaissent dans la question.
 - Chaque exercice doit avoir une solution unique et non ambiguë.
+- Toujours un espace à la fin de l'énoncé de la question avant le "?". Donc "[question] ?"
 - L'enrobage (contexte, phrases, mots) des exercices de type "variation" doit être entièrement modifié par rapport aux exemples fournis, tout en conservant la mécanique de résolution sous-jacente identique.
 - Les exercices "inventés" doivent proposer des problèmes originaux tout en respectant la logique, le format et les concepts de la section.
 - IMPORTANT: Chaque énoncé de question doit être clair et direct. Ne jamais inclure de texte comme "Variation X", "Inédit X", ou "Exercice X" dans l'énoncé.

@@ -34,6 +34,7 @@ Structure logique :
 
 Consignes pour les questions :
 - Chaque texte doit être accompagné du nombre exact de questions demandé
+- Toujours un espace à la fin de l'énoncé de la question avant le "?". Donc "[question] ?"
 - Variété : inclure des questions de compréhension littérale, d'inférence, de vocabulaire, de structure et de thèse principale
 - Au moins une question doit porter sur ce qui pourrait remplacer une expression spécifique marquée par "(Question X)" dans le texte
 - Au moins une question doit porter sur le message principal ou l'objectif du texte

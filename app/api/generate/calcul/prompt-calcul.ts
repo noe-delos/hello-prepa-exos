@@ -67,6 +67,7 @@ Contraintes Cruciales :
 
 - Les exercices doivent être strictement limités aux thèmes sélectionnés par l'utilisateur.
 - Chaque exercice doit avoir une solution unique et non ambiguë.
+- Toujours un espace à la fin de l'énoncé de la question avant le "?". Donc "[question] ?"
 - L'enrobage (contexte, noms, valeurs) des exercices de type "variation" doit être entièrement modifié par rapport aux exemples fournis, tout en conservant la mécanique de résolution sous-jacente identique.
 - Les exercices "inventés" doivent proposer des problèmes originaux tout en respectant la logique, le format et les concepts de la section Calcul.
 - Les calculs nécessaires doivent être réalisables sans calculatrice dans les conditions de l'examen.
