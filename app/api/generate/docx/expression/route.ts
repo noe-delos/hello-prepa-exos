@@ -904,7 +904,7 @@ function createCompactReplacementTable(
   // Create a compact table with a row of cells
   return new docx.Table({
     width: {
-      size: 100,
+      size: 75,
       type: docx.WidthType.PERCENTAGE,
     },
     columnWidths: cellWidths,
