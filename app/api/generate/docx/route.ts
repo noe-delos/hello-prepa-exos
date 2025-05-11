@@ -7,7 +7,7 @@ import { Packer } from "docx";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 
-// Schéma de validation pour la requête
+// Schéma de validation pour la requête - updated to make options C, D, E optional
 const DocxRequestSchema = z.object({
   userId: z.string().uuid(),
   content: z.object({
@@ -21,9 +21,18 @@ const DocxRequestSchema = z.object({
         options: z.object({
           A: z.union([z.string(), z.number()]).transform((val) => String(val)),
           B: z.union([z.string(), z.number()]).transform((val) => String(val)),
-          C: z.union([z.string(), z.number()]).transform((val) => String(val)),
-          D: z.union([z.string(), z.number()]).transform((val) => String(val)),
-          E: z.union([z.string(), z.number()]).transform((val) => String(val)),
+          C: z
+            .union([z.string(), z.number()])
+            .transform((val) => String(val))
+            .optional(),
+          D: z
+            .union([z.string(), z.number()])
+            .transform((val) => String(val))
+            .optional(),
+          E: z
+            .union([z.string(), z.number()])
+            .transform((val) => String(val))
+            .optional(),
         }),
         answer: z
           .union([z.string(), z.number()])
@@ -32,6 +41,7 @@ const DocxRequestSchema = z.object({
         explanation: z.string().optional(),
         shortExplanation: z.string().optional(),
         image: z.string().optional(),
+        theme: z.string().optional(), // Added theme field
       })
     ),
     conclusion: z.string(),
@@ -41,6 +51,8 @@ const DocxRequestSchema = z.object({
     .enum(["sansCorrection", "correctionCourte", "correctionDetaillee"])
     .default("sansCorrection"),
   randomExercises: z.array(z.any()).optional(),
+  optionsCount: z.number().int().min(2).max(5).default(5), // Added optionsCount field
+  selectedThemes: z.array(z.string()).optional(), // Added selectedThemes field
 });
 
 // Images en base64 pour le logo et le filigrane - Utiliser des images minimalistes valides
@@ -68,6 +80,8 @@ export async function POST(request: NextRequest) {
       requestBody.correctionType,
       "content keys:",
       Object.keys(requestBody.content || {}),
+      "actual content keys:",
+      requestBody.content,
       "exercises count:",
       requestBody.content?.exercises?.length || 0
     );
@@ -89,25 +103,34 @@ export async function POST(request: NextRequest) {
       content,
       title,
       correctionType = "sansCorrection",
+      optionsCount = 5, // Extract optionsCount with default value
     } = validationResult.data;
+
     console.log(
-      `DOCX API: Processing document for user ${userId} with title ${title} and correction type ${correctionType}`
+      `DOCX API: Processing document for user ${userId} with title ${title}, correction type ${correctionType}, and ${optionsCount} options`
     );
 
     // Vérifier et nettoyer les données
     console.log("DOCX API: Cleaning and validating data");
     // S'assurer que tous les champs nécessaires sont présents et valides
-    content.exercises = content.exercises.map((exercise, index) => {
+    content.exercises = content.exercises.map((exercise: any, index) => {
       console.log(`DOCX API: Processing exercise ${index + 1}`);
 
-      // S'assurer que les options sont des chaînes
-      exercise.options = {
-        A: String(exercise.options.A || ""),
-        B: String(exercise.options.B || ""),
-        C: String(exercise.options.C || ""),
-        D: String(exercise.options.D || ""),
-        E: String(exercise.options.E || ""),
-      };
+      // Create options object with the appropriate number of options
+      const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+        String.fromCharCode(65 + i)
+      ); // A=65, B=66, etc.
+
+      // Initialize options object
+      const options: any = {};
+
+      // Fill in options from A to the specified limit
+      optionLetters.forEach((letter) => {
+        options[letter] = String(exercise.options[letter] || "");
+      });
+
+      // Replace the options object
+      exercise.options = options;
 
       // S'assurer que la question est une chaîne et nettoyer les mentions inutiles
       exercise.question = String(exercise.question || `Question ${index + 1}`);
@@ -129,7 +152,8 @@ export async function POST(request: NextRequest) {
       content,
       logoBase64,
       watermarkBase64,
-      correctionType
+      correctionType,
+      optionsCount // Pass optionsCount to generateDocument
     );
 
     // Créer le buffer pour le document
@@ -207,7 +231,8 @@ function generateDocument(
   content: any,
   logoBase64: string,
   watermarkBase64: string,
-  correctionType = "sansCorrection"
+  correctionType = "sansCorrection",
+  optionsCount = 5 // Add optionsCount parameter with default value
 ) {
   try {
     console.log("DOCX API: Starting document generation");
@@ -595,7 +620,6 @@ function generateDocument(
                     new docx.ImageRun({
                       type: "png",
                       data: "data:image/png;base64,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",
-
                       transformation: {
                         width: 40,
                         height: 80,
@@ -702,7 +726,8 @@ function generateDocument(
           },
           children: generateQuestionParagraphs(
             content.exercises,
-            correctionType
+            correctionType,
+            optionsCount // Pass optionsCount to generateQuestionParagraphs
           ),
         },
       ],
@@ -720,7 +745,8 @@ function generateDocument(
 // Fonction pour générer les paragraphes de questions avec pagination améliorée
 function generateQuestionParagraphs(
   exercises: any,
-  correctionType = "sansCorrection"
+  correctionType = "sansCorrection",
+  optionsCount = 5 // Default to 5 options if not specified
 ) {
   try {
     console.log("DOCX API: Generating question paragraphs");
@@ -742,6 +768,11 @@ function generateQuestionParagraphs(
     // Calculate remaining exercises for the last page
     const remainingExercises =
       (totalExercises - firstPageExercises) % exercisesPerSubsequentPage;
+
+    // Generate option letters based on optionsCount
+    const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+      String.fromCharCode(65 + i)
+    ); // A=65, B=66, etc.
 
     // Loop through exercises
     exercises.forEach((exercise: any, index: number) => {
@@ -825,14 +856,11 @@ function generateQuestionParagraphs(
         }
       }
 
-      // Options
-      const options = [
-        { letter: "A", text: exercise.options.A },
-        { letter: "B", text: exercise.options.B },
-        { letter: "C", text: exercise.options.C },
-        { letter: "D", text: exercise.options.D },
-        { letter: "E", text: exercise.options.E },
-      ];
+      // Options - only include options that are available based on optionsCount
+      const options = optionLetters.map((letter) => ({
+        letter,
+        text: exercise.options[letter] || "", // Use empty string as fallback
+      }));
 
       options.forEach((option, optIndex) => {
         // Only bold the correct option if correction is requested

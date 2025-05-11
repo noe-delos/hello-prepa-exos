@@ -273,7 +273,9 @@ export default function QuestionGenerator({ user }: any) {
       } else if (formState.sousTest === "comprehension") {
         apiEndpoint = "/api/generate/comprehension";
       } else if (formState.sousTest === "calcul") {
-        apiEndpoint = "/api/generate/calcul"; // New endpoint for calcul
+        apiEndpoint = "/api/generate/calcul";
+      } else if (formState.sousTest === "expression") {
+        apiEndpoint = "/api/generate/expression"; // New endpoint for expression
       } else {
         apiEndpoint = "/api/generate";
       }
@@ -378,6 +380,12 @@ export default function QuestionGenerator({ user }: any) {
         variationCount: 2, // Nombre de textes par défaut
         ineditsCount: 5, // Nombre de questions par texte par défaut
         selectedThemes: [], // Reset selected themes
+      }));
+    } else if (value === "expression") {
+      setFormState((prev) => ({
+        ...prev,
+        sousTest: value,
+        selectedThemes: [], // No themes needed for expression
       }));
     } else {
       setFormState((prev) => ({
@@ -633,26 +641,33 @@ export default function QuestionGenerator({ user }: any) {
                     </label>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors">
+                    <div
+                      className="h-5 w-5 rounded-full border border-gray-300 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => handleSousTestChange("expression")}
+                    >
                       <input
                         type="radio"
                         id="expression"
                         name="sous-test"
                         value="expression"
                         className="sr-only"
+                        checked={formState.sousTest === "expression"}
                         onChange={() => {}}
-                        disabled
                       />
-                      <div className={cn("h-3 w-3 rounded-full")}></div>
+                      <div
+                        className={cn(
+                          "h-3 w-3 rounded-full",
+                          formState.sousTest === "expression"
+                            ? "bg-[#FFE245]"
+                            : ""
+                        )}
+                      ></div>
                     </div>
                     <label
                       htmlFor="expression"
-                      className="cursor-not-allowed opacity-50"
+                      onClick={() => handleSousTestChange("expression")}
                     >
                       Expression
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        Bientôt disponible
-                      </Badge>
                     </label>
                   </div>
                 </CardContent>

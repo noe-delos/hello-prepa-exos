@@ -8,7 +8,7 @@ import { Packer } from "docx";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 
-// Schéma de validation pour la requête - updated to make options C, D, E optional
+// Schéma de validation pour la requête
 const DocxRequestSchema = z.object({
   userId: z.string().uuid(),
   content: z.object({
@@ -31,16 +31,13 @@ const DocxRequestSchema = z.object({
                 .transform((val) => String(val)),
               C: z
                 .union([z.string(), z.number()])
-                .transform((val) => String(val))
-                .optional(),
+                .transform((val) => String(val)),
               D: z
                 .union([z.string(), z.number()])
-                .transform((val) => String(val))
-                .optional(),
+                .transform((val) => String(val)),
               E: z
                 .union([z.string(), z.number()])
-                .transform((val) => String(val))
-                .optional(),
+                .transform((val) => String(val)),
             }),
             answer: z
               .union([z.string(), z.number()])
@@ -48,7 +45,6 @@ const DocxRequestSchema = z.object({
               .optional(),
             explanation: z.string().optional(),
             shortExplanation: z.string().optional(),
-            theme: z.string().optional(), // Added theme field for consistency
           })
         ),
       })
@@ -60,8 +56,6 @@ const DocxRequestSchema = z.object({
     .enum(["sansCorrection", "correctionCourte", "correctionDetaillee"])
     .default("sansCorrection"),
   textsWithQuestions: z.array(z.any()).optional(),
-  optionsCount: z.number().int().min(2).max(5).default(5), // Added optionsCount field
-  selectedThemes: z.array(z.string()).optional(), // Added selectedThemes field
 });
 
 // Images en base64 pour le logo et le filigrane - Utiliser des images minimalistes valides
@@ -110,68 +104,13 @@ export async function POST(request: NextRequest) {
       content,
       title,
       correctionType = "sansCorrection",
-      optionsCount = 5, // Extract optionsCount with default value
-      selectedThemes = [], // Extract selectedThemes with default value
     } = validationResult.data;
-
     console.log(
-      `DOCX Comprehension API: Processing document for user ${userId} with title ${title}, correction type ${correctionType}, and ${optionsCount} options`
+      `DOCX Comprehension API: Processing document for user ${userId} with title ${title} and correction type ${correctionType}`
     );
-
-    // Log additional parameters for consistency
-    if (selectedThemes.length > 0) {
-      console.log(
-        `DOCX Comprehension API: Selected themes: ${selectedThemes.join(", ")}`
-      );
-    }
 
     // Vérifier et nettoyer les données
     console.log("DOCX Comprehension API: Cleaning and validating data");
-
-    // Process each text and its questions to ensure options are properly formatted
-    content.texts = content.texts.map((textItem: any, textIndex: number) => {
-      console.log(
-        `DOCX Comprehension API: Processing text ${textIndex + 1} with ${
-          textItem.questions.length
-        } questions`
-      );
-
-      // Process each question to ensure options match the desired count
-      textItem.questions = textItem.questions.map(
-        (question: any, questionIndex: number) => {
-          console.log(
-            `DOCX Comprehension API: Processing question ${
-              questionIndex + 1
-            } of text ${textIndex + 1}`
-          );
-
-          // Generate option letters based on optionsCount
-          const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
-            String.fromCharCode(65 + i)
-          ); // A=65, B=66, etc.
-
-          // Initialize options object
-          const options: any = {};
-
-          // Fill in options from A to the specified limit
-          optionLetters.forEach((letter) => {
-            options[letter] = String(question.options[letter] || "");
-          });
-
-          // Replace the options object
-          question.options = options;
-
-          // Ensure answer is valid within the available options
-          if (question.answer && !optionLetters.includes(question.answer)) {
-            question.answer = optionLetters[0]; // Default to first option if invalid
-          }
-
-          return question;
-        }
-      );
-
-      return textItem;
-    });
 
     // Générer le document DOCX
     console.log("DOCX Comprehension API: Generating document");
@@ -179,8 +118,7 @@ export async function POST(request: NextRequest) {
       content,
       logoBase64,
       watermarkBase64,
-      correctionType,
-      optionsCount // Pass optionsCount to document generator
+      correctionType
     );
 
     // Créer le buffer pour le document
@@ -262,8 +200,7 @@ function generateDocument(
   content: any,
   logoBase64: any,
   watermarkBase64: any,
-  correctionType = "sansCorrection",
-  optionsCount = 5 // Add optionsCount parameter with default value
+  correctionType = "sansCorrection"
 ) {
   try {
     console.log("DOCX Comprehension API: Starting document generation");
@@ -760,8 +697,7 @@ function generateDocument(
           },
           children: generateComprehensionParagraphs(
             content.texts,
-            correctionType,
-            optionsCount // Pass optionsCount to paragraph generator
+            correctionType
           ),
         },
       ],
@@ -781,25 +717,13 @@ function generateDocument(
 // Fonction pour générer les paragraphes des textes et questions
 function generateComprehensionParagraphs(
   texts: any,
-  correctionType = "sansCorrection",
-  optionsCount = 5 // Add optionsCount parameter with default value
+  correctionType = "sansCorrection"
 ) {
   try {
     console.log(
       "DOCX Comprehension API: Generating texts and questions paragraphs"
     );
     const children: any = [];
-
-    // Generate option letters based on optionsCount
-    const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
-      String.fromCharCode(65 + i)
-    ); // A=65, B=66, etc.
-
-    console.log(
-      `DOCX Comprehension API: Using ${optionsCount} options per question (${optionLetters.join(
-        ", "
-      )})`
-    );
 
     // Loop through texts
     texts.forEach((textItem: any, textIndex: any) => {
@@ -898,11 +822,14 @@ function generateComprehensionParagraphs(
           })
         );
 
-        // Add options - only include options that are available based on optionsCount
-        const options = optionLetters.map((letter) => ({
-          letter: letter,
-          text: question.options[letter] || "", // Use empty string as fallback
-        }));
+        // Add options
+        const options = [
+          { letter: "A", text: question.options.A },
+          { letter: "B", text: question.options.B },
+          { letter: "C", text: question.options.C },
+          { letter: "D", text: question.options.D },
+          { letter: "E", text: question.options.E },
+        ];
 
         options.forEach((option, optIndex) => {
           // Only bold the correct option if correction is requested
@@ -1018,11 +945,14 @@ function generateComprehensionParagraphs(
             })
           );
 
-          // Add options - only include options that are available based on optionsCount
-          const options = optionLetters.map((letter) => ({
-            letter: letter,
-            text: question.options[letter] || "", // Use empty string as fallback
-          }));
+          // Add options
+          const options = [
+            { letter: "A", text: question.options.A },
+            { letter: "B", text: question.options.B },
+            { letter: "C", text: question.options.C },
+            { letter: "D", text: question.options.D },
+            { letter: "E", text: question.options.E },
+          ];
 
           options.forEach((option, optIndex) => {
             // Only bold the correct option if correction is requested
