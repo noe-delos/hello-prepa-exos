@@ -17,6 +17,7 @@ const openai = new OpenAI({
 // Initialize Anthropic
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+  timeout: 900000,
 });
 
 // Define validation schema for request body
@@ -325,7 +326,7 @@ ${
       // Use Claude with thinking enabled
       const msg: any = await anthropic.messages.create({
         model: "claude-3-7-sonnet-20250219",
-        max_tokens: 20000,
+        max_tokens: 64000,
         temperature: 1,
         system:
           systemPrompt +
@@ -333,7 +334,7 @@ ${
         messages: [{ role: "user", content: prompt }],
         thinking: {
           type: "enabled",
-          budget_tokens: 16000,
+          budget_tokens: 50000,
         },
       });
 
