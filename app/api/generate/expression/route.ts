@@ -732,6 +732,14 @@ ${
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Pass through authentication headers from the original request
+        ...(request.headers.get("authorization") && {
+          authorization: request.headers.get("authorization")!,
+        }),
+        ...(request.headers.get("cookie") && {
+          cookie: request.headers.get("cookie")!,
+        }),
+        // Add any other auth headers your app uses
       },
       body: JSON.stringify(docxPayload),
     });
