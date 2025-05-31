@@ -191,10 +191,6 @@ async function callClaudeWithStreaming(
         systemPrompt +
         "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
       messages: [{ role: "user", content: prompt }],
-      thinking: {
-        type: "enabled",
-        budget_tokens: 16000,
-      },
       stream: true,
     });
 
@@ -279,10 +275,6 @@ IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou aprè
     system:
       "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
     messages: [{ role: "user", content: validationPrompt }],
-    thinking: {
-      type: "enabled",
-      budget_tokens: 10000,
-    },
   });
 
   console.log("API Calcul: Claude JSON validation response received");
@@ -696,7 +688,6 @@ ${
         ...(request.headers.get("cookie") && {
           cookie: request.headers.get("cookie")!,
         }),
-        // Add any other auth headers your app uses
       },
       body: JSON.stringify(docxPayload),
     });
