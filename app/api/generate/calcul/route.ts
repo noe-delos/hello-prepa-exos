@@ -219,14 +219,11 @@ async function callClaudeWithStreaming(
           `API Calcul: Content block stopped - Index: ${chunk.index}`
         );
       }
-      console.log(chunk);
     }
 
     console.log("API Calcul: Streaming completed");
-    console.log(
-      `API Calcul: Thinking content length: ${thinkingContent.length}`
-    );
-    console.log(`API Calcul: Main content length: ${mainContent.length}`);
+    console.log(`API Calcul: Thinking content length: ${thinkingContent}`);
+    console.log(`API Calcul: Main content length: ${mainContent}`);
 
     return mainContent;
   } catch (error) {
