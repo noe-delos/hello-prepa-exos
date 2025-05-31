@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
 // src/app/api/generate/comprehension/route.ts
 import { NextRequest, NextResponse } from "next/server";
