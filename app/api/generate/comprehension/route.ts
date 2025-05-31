@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
 // src/app/api/generate/comprehension/route.ts
 import { NextRequest, NextResponse } from "next/server";
@@ -16,6 +17,7 @@ const openai = new OpenAI({
 // Initialize Anthropic
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+  timeout: 900000,
 });
 
 // Define validation schema for request body
@@ -55,6 +57,245 @@ const GeneratedContentSchema = z.object({
   ),
   conclusion: z.string(),
 });
+
+// Helper function to extract JSON from text
+function extractJSON(text: string): string {
+  console.log("API Comprehension: Attempting to extract JSON from text");
+
+  // Check if response is wrapped in a code block
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (jsonMatch && jsonMatch[1]) {
+    console.log("API Comprehension: Found JSON in code block");
+    return jsonMatch[1].trim();
+  }
+
+  // Remove any text before or after the JSON object
+  const jsonObjectMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonObjectMatch) {
+    console.log("API Comprehension: Found JSON object in text");
+    return jsonObjectMatch[0];
+  }
+
+  console.log(
+    "API Comprehension: No JSON pattern found, returning original text"
+  );
+  return text;
+}
+
+// Helper function to validate and fix content structure
+function validateAndFixContent(
+  content: any,
+  optionLetters: string[],
+  niveau: string
+) {
+  console.log("API Comprehension: Validating and fixing content structure");
+
+  // Ensure all required fields are present
+  if (!content.title) {
+    content.title = `Exercices de Compréhension TAGE MAGE - ${niveau}`;
+  }
+  if (!content.introduction) {
+    content.introduction = `Voici une série d'exercices pour vous préparer à la section Compréhension du TAGE MAGE. Chaque texte est suivi de questions pour évaluer votre compréhension.`;
+  }
+  if (!content.conclusion) {
+    content.conclusion = "Fin des exercices. Bonne préparation !";
+  }
+
+  // Ensure texts is an array
+  if (!content.texts || !Array.isArray(content.texts)) {
+    console.log("API Comprehension: No valid texts array found");
+    content.texts = [];
+  }
+
+  // Normalize and validate each text and its questions
+  content.texts = content.texts.map((text: any, textIndex: number) => {
+    console.log(`API Comprehension: Processing text ${textIndex + 1}`);
+
+    // Ensure content is a string
+    if (!text.content || typeof text.content !== "string") {
+      text.content = `Texte ${textIndex + 1} - Contenu manquant`;
+    }
+
+    // Ensure questions is an array
+    if (!text.questions || !Array.isArray(text.questions)) {
+      text.questions = [];
+    }
+
+    text.questions = text.questions.map(
+      (question: any, questionIndex: number) => {
+        // Ensure question is a string
+        if (!question.question || typeof question.question !== "string") {
+          question.question = `Question ${questionIndex + 1} - Énoncé manquant`;
+        }
+
+        // Ensure options are present and valid
+        if (!question.options) {
+          question.options = {};
+          // Add only the required options
+          optionLetters.forEach((letter) => {
+            question.options[letter] = "";
+          });
+        } else {
+          // Keep only the required options
+          const newOptions: any = {};
+          optionLetters.forEach((letter) => {
+            if (question.options[letter]) {
+              newOptions[letter] =
+                typeof question.options[letter] === "string"
+                  ? question.options[letter]
+                  : String(question.options[letter]);
+            } else {
+              newOptions[letter] = "";
+            }
+          });
+          question.options = newOptions;
+        }
+
+        // Ensure answer is a string
+        if (!question.answer) {
+          question.answer = optionLetters[0]; // First letter as default answer
+        } else if (typeof question.answer !== "string") {
+          question.answer = String(question.answer);
+        }
+
+        // Ensure answer is among valid options
+        if (!optionLetters.includes(question.answer)) {
+          question.answer = optionLetters[0];
+        }
+
+        return question;
+      }
+    );
+
+    return text;
+  });
+
+  return content;
+}
+
+// Helper function to call Claude with streaming
+async function callClaudeWithStreaming(
+  prompt: string,
+  systemPrompt: string
+): Promise<string> {
+  console.log("API Comprehension: Starting Claude streaming call");
+
+  let accumulatedResponse = "";
+  let thinkingContent = "";
+  let mainContent = "";
+
+  try {
+    const stream = await anthropic.messages.create({
+      model: "claude-3-7-sonnet-20250219",
+      max_tokens: 20000,
+      temperature: 1,
+      system:
+        systemPrompt +
+        "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
+      messages: [{ role: "user", content: prompt }],
+      thinking: {
+        type: "enabled",
+        budget_tokens: 16000,
+      },
+      stream: true,
+    });
+
+    console.log("API Comprehension: Claude stream created, processing chunks");
+
+    for await (const chunk of stream as any) {
+      if (chunk.type === "content_block_start") {
+        console.log(
+          `API Comprehension: Content block started - Index: ${chunk.index}, Type: ${chunk.content_block.type}`
+        );
+      } else if (chunk.type === "content_block_delta") {
+        if (chunk.index === 0) {
+          // This is the thinking content
+          thinkingContent += chunk.delta.text;
+        } else if (chunk.index === 1) {
+          // This is the main response content
+          mainContent += chunk.delta.text;
+          accumulatedResponse += chunk.delta.text;
+        }
+      } else if (chunk.type === "content_block_stop") {
+        console.log(
+          `API Comprehension: Content block stopped - Index: ${chunk.index}`
+        );
+      }
+    }
+
+    console.log("API Comprehension: Streaming completed");
+    console.log(
+      `API Comprehension: Thinking content length: ${thinkingContent.length}`
+    );
+    console.log(
+      `API Comprehension: Main content length: ${mainContent.length}`
+    );
+
+    return mainContent;
+  } catch (error) {
+    console.error("API Comprehension: Error during streaming:", error);
+    throw error;
+  }
+}
+
+// Helper function to call Claude without streaming for JSON validation
+async function callClaudeForJSONValidation(
+  invalidJSON: string,
+  error: string,
+  optionsCount: number
+): Promise<string> {
+  console.log("API Comprehension: Calling Claude for JSON validation");
+
+  const validationPrompt = `Le JSON suivant est invalide ou mal formaté:
+
+${invalidJSON}
+
+Erreur rencontrée: ${error}
+
+Corrige ce JSON pour qu'il soit valide et respecte exactement cette structure:
+{
+  "title": "string",
+  "introduction": "string",
+  "texts": [
+    {
+      "content": "string (le texte complet)",
+      "questions": [
+        {
+          "question": "string",
+          "options": {
+            ${Array.from(
+              { length: optionsCount },
+              (_, i) => `"${String.fromCharCode(65 + i)}": "string"`
+            ).join(",\n            ")}
+          },
+          "answer": "string (une des lettres des options)",
+          "explanation": "string (optionnel)",
+          "shortExplanation": "string (optionnel)"
+        }
+      ]
+    }
+  ],
+  "conclusion": "string"
+}
+
+IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou après.`;
+
+  const msg: any = await anthropic.messages.create({
+    model: "claude-3-7-sonnet-20250219",
+    max_tokens: 20000,
+    temperature: 0.3,
+    system:
+      "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
+    messages: [{ role: "user", content: validationPrompt }],
+    thinking: {
+      type: "enabled",
+      budget_tokens: 10000,
+    },
+  });
+
+  console.log("API Comprehension: Claude JSON validation response received");
+  return msg.content[1].text || "{}";
+}
 
 export async function POST(request: NextRequest) {
   console.log("API Comprehension: Generate endpoint called");
@@ -315,66 +556,92 @@ ${
       console.log("API Comprehension: OpenAI response received successfully");
       rawResponse = completion.choices[0].message.content || "{}";
     } else {
-      // Use Claude with thinking enabled
-      const msg: any = await anthropic.messages.create({
-        model: "claude-3-7-sonnet-20250219",
-        max_tokens: 20000,
-        temperature: 1,
-        system:
-          systemPrompt +
-          "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
-        messages: [{ role: "user", content: prompt }],
-        thinking: {
-          type: "enabled",
-          budget_tokens: 16000,
-        },
-      });
+      // Use Claude with streaming
+      try {
+        rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
+        console.log("API Comprehension: Claude streaming completed");
+        console.log(
+          `API Comprehension: Raw response length: ${rawResponse.length}`
+        );
 
-      console.log("API Comprehension: Claude response received successfully");
-      rawResponse = msg.content[1].text || "{}";
-    }
+        // Extract JSON from the response
+        rawResponse = extractJSON(rawResponse);
 
-    // Additional processing for Claude responses to ensure valid JSON
-    if (llmModel === "claude") {
-      // Try to extract JSON from Claude's response (it might contain markdown code blocks or additional text)
-      console.log(
-        "API Comprehension: Processing Claude response to extract JSON"
-      );
+        // Try to parse the JSON
+        try {
+          generatedContent = JSON.parse(rawResponse);
+          console.log(
+            "API Comprehension: Successfully parsed JSON from streaming response"
+          );
+        } catch (parseError) {
+          console.error(
+            "API Comprehension: Failed to parse JSON from streaming response:",
+            parseError
+          );
+          console.log(
+            "API Comprehension: Attempting to fix JSON with second Claude call"
+          );
 
-      // Check if response is wrapped in a code block
-      const jsonMatch = rawResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (jsonMatch && jsonMatch[1]) {
-        rawResponse = jsonMatch[1].trim();
+          // Make a second call to Claude to fix the JSON
+          const fixedJSON = await callClaudeForJSONValidation(
+            rawResponse,
+            String(parseError),
+            optionsCount
+          );
+
+          // Extract JSON from the fixed response
+          const cleanedJSON = extractJSON(fixedJSON);
+
+          try {
+            generatedContent = JSON.parse(cleanedJSON);
+            console.log("API Comprehension: Successfully parsed fixed JSON");
+          } catch (secondParseError) {
+            console.error(
+              "API Comprehension: Failed to parse fixed JSON:",
+              secondParseError
+            );
+            throw new Error(
+              "Unable to generate valid JSON after multiple attempts"
+            );
+          }
+        }
+      } catch (error) {
+        console.error(
+          "API Comprehension: Error in Claude streaming process:",
+          error
+        );
+        throw error;
       }
+    }
 
-      // Remove any text before or after the JSON object
-      const jsonObjectMatch = rawResponse.match(/\{[\s\S]*\}/);
-      if (jsonObjectMatch) {
-        rawResponse = jsonObjectMatch[0];
+    // If we're using OpenAI or if generatedContent wasn't set above
+    if (!generatedContent && llmModel === "openai") {
+      try {
+        generatedContent = JSON.parse(rawResponse);
+        console.log("API Comprehension: Parsed generated content successfully");
+      } catch (parseError) {
+        console.error(
+          "API Comprehension: Error parsing LLM response:",
+          parseError
+        );
+        console.log("API Comprehension: Raw LLM response:", rawResponse);
+        return NextResponse.json(
+          {
+            error:
+              "Failed to parse LLM response. The model did not return valid JSON.",
+            details: String(parseError),
+          },
+          { status: 500 }
+        );
       }
-
-      console.log("API Comprehension: Claude response processed");
     }
 
-    try {
-      // Parse the raw JSON response
-      generatedContent = JSON.parse(rawResponse);
-      console.log("API Comprehension: Parsed generated content successfully");
-    } catch (parseError) {
-      console.error(
-        "API Comprehension: Error parsing LLM response:",
-        parseError
-      );
-      console.log("API Comprehension: Raw LLM response:", rawResponse);
-      return NextResponse.json(
-        {
-          error:
-            "Failed to parse LLM response. The model did not return valid JSON.",
-          details: String(parseError),
-        },
-        { status: 500 }
-      );
-    }
+    // Validate and fix the content structure
+    generatedContent = validateAndFixContent(
+      generatedContent,
+      optionLetters,
+      niveau
+    );
 
     // Validate the generated content against our schema
     const contentValidation =
@@ -385,24 +652,8 @@ ${
         JSON.stringify(contentValidation.error)
       );
 
-      // Attempt to fix the content structure
-      console.log("API Comprehension: Attempting to fix content structure");
-
-      // Ensure all required fields are present
-      if (!generatedContent.title) {
-        generatedContent.title = `Exercices de Compréhension TAGE MAGE - ${niveau}`;
-      }
-      if (!generatedContent.introduction) {
-        generatedContent.introduction = `Voici une série d'exercices pour vous préparer à la section Compréhension du TAGE MAGE. Chaque texte est suivi de questions pour évaluer votre compréhension.`;
-      }
-      if (!generatedContent.conclusion) {
-        generatedContent.conclusion = "Fin des exercices. Bonne préparation !";
-      }
-
-      // Ensure texts is an array
-      if (!generatedContent.texts || !Array.isArray(generatedContent.texts)) {
-        generatedContent.texts = [];
-        // If we have no valid texts, return an error
+      // Check if we have no valid texts
+      if (!generatedContent.texts || generatedContent.texts.length === 0) {
         return NextResponse.json(
           {
             error:
@@ -413,84 +664,15 @@ ${
         );
       }
 
-      // Revalidate after fixes
-      const revalidation = GeneratedContentSchema.safeParse(generatedContent);
-      if (!revalidation.success) {
-        return NextResponse.json(
-          {
-            error:
-              "La structure du contenu généré reste invalide après corrections.",
-            details: revalidation.error,
-          },
-          { status: 500 }
-        );
-      }
+      return NextResponse.json(
+        {
+          error:
+            "La structure du contenu généré reste invalide après corrections.",
+          details: contentValidation.error,
+        },
+        { status: 500 }
+      );
     }
-
-    // Normalize and validate each text and its questions
-    generatedContent.texts = generatedContent.texts.map(
-      (text: any, textIndex: any) => {
-        // Ensure content is a string
-        if (!text.content || typeof text.content !== "string") {
-          text.content = `Texte ${textIndex + 1} - Contenu manquant`;
-        }
-
-        // Ensure questions is an array
-        if (!text.questions || !Array.isArray(text.questions)) {
-          text.questions = [];
-        }
-
-        text.questions = text.questions.map(
-          (question: any, questionIndex: any) => {
-            // Ensure question is a string
-            if (!question.question || typeof question.question !== "string") {
-              question.question = `Question ${
-                questionIndex + 1
-              } - Énoncé manquant`;
-            }
-
-            // Ensure options are present and valid
-            if (!question.options) {
-              question.options = {};
-              // Add only the required options
-              optionLetters.forEach((letter) => {
-                question.options[letter] = "";
-              });
-            } else {
-              // Keep only the required options
-              const newOptions: any = {};
-              optionLetters.forEach((letter) => {
-                if (question.options[letter]) {
-                  newOptions[letter] =
-                    typeof question.options[letter] === "string"
-                      ? question.options[letter]
-                      : String(question.options[letter]);
-                } else {
-                  newOptions[letter] = "";
-                }
-              });
-              question.options = newOptions;
-            }
-
-            // Ensure answer is a string
-            if (!question.answer) {
-              question.answer = optionLetters[0]; // First letter as default answer
-            } else if (typeof question.answer !== "string") {
-              question.answer = String(question.answer);
-            }
-
-            // Ensure answer is among valid options
-            if (!optionLetters.includes(question.answer)) {
-              question.answer = optionLetters[0];
-            }
-
-            return question;
-          }
-        );
-
-        return text;
-      }
-    );
 
     // Calculate total question count (for database)
     const totalQuestions = generatedContent.texts.reduce(
@@ -517,6 +699,14 @@ ${
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Pass through authentication headers from the original request
+        ...(request.headers.get("authorization") && {
+          authorization: request.headers.get("authorization")!,
+        }),
+        ...(request.headers.get("cookie") && {
+          cookie: request.headers.get("cookie")!,
+        }),
+        // Add any other auth headers your app uses
       },
       body: JSON.stringify(docxPayload),
     });

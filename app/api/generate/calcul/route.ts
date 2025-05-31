@@ -57,6 +57,238 @@ const GeneratedContentSchema = z.object({
   conclusion: z.string(),
 });
 
+// Helper function to extract JSON from text
+function extractJSON(text: string): string {
+  console.log("API Calcul: Attempting to extract JSON from text");
+
+  // Check if response is wrapped in a code block
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (jsonMatch && jsonMatch[1]) {
+    console.log("API Calcul: Found JSON in code block");
+    return jsonMatch[1].trim();
+  }
+
+  // Remove any text before or after the JSON object
+  const jsonObjectMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonObjectMatch) {
+    console.log("API Calcul: Found JSON object in text");
+    return jsonObjectMatch[0];
+  }
+
+  console.log("API Calcul: No JSON pattern found, returning original text");
+  return text;
+}
+
+// Helper function to validate and fix content structure
+function validateAndFixContent(
+  content: any,
+  optionLetters: string[],
+  selectedThemes: string[]
+) {
+  console.log("API Calcul: Validating and fixing content structure");
+
+  // Ensure all required fields are present
+  if (!content.title) {
+    content.title = `Exercices de calcul TAGE MAGE`;
+  }
+  if (!content.introduction) {
+    content.introduction = `Voici une série d'exercices pour vous préparer à la section calcul du TAGE MAGE.`;
+  }
+  if (!content.conclusion) {
+    content.conclusion = "Fin des exercices. Bonne préparation !";
+  }
+
+  // Ensure exercises is an array
+  if (!content.exercises || !Array.isArray(content.exercises)) {
+    console.log("API Calcul: No valid exercises array found");
+    content.exercises = [];
+  }
+
+  // Normalize and clean up the exercises
+  content.exercises = content.exercises.map((exercise: any, index: number) => {
+    console.log(`API Calcul: Processing exercise ${index + 1}`);
+
+    // Ensure question is a string
+    if (typeof exercise.question !== "string") {
+      exercise.question = String(exercise.question || "");
+    }
+
+    // Clean up the question to remove unnecessary mentions
+    exercise.question = exercise.question
+      .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
+      .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
+
+    // Ensure options are present and are strings
+    if (!exercise.options) {
+      exercise.options = {};
+      optionLetters.forEach((letter) => {
+        exercise.options[letter] = "";
+      });
+    } else {
+      // Ensure all requested options are present
+      optionLetters.forEach((letter) => {
+        if (!exercise.options[letter]) {
+          exercise.options[letter] = "";
+        } else if (typeof exercise.options[letter] !== "string") {
+          exercise.options[letter] = String(exercise.options[letter]);
+        }
+      });
+
+      // Remove any extra options beyond what was requested
+      Object.keys(exercise.options).forEach((key) => {
+        if (!optionLetters.includes(key)) {
+          delete exercise.options[key];
+        }
+      });
+    }
+
+    // Ensure answer is a string and is a valid option
+    if (!exercise.answer) {
+      exercise.answer = optionLetters[0]; // Default to first option
+    } else if (typeof exercise.answer !== "string") {
+      exercise.answer = String(exercise.answer);
+    }
+
+    // Ensure answer is among valid options
+    if (!optionLetters.includes(exercise.answer)) {
+      exercise.answer = optionLetters[0];
+    }
+
+    // Ensure theme is present and valid
+    if (!exercise.theme || typeof exercise.theme !== "string") {
+      // Assign a random theme from selected themes
+      exercise.theme =
+        selectedThemes[Math.floor(Math.random() * selectedThemes.length)];
+    } else if (!selectedThemes.includes(exercise.theme)) {
+      // If theme is not in selected themes, reassign
+      exercise.theme =
+        selectedThemes[Math.floor(Math.random() * selectedThemes.length)];
+    }
+
+    return exercise;
+  });
+
+  return content;
+}
+
+// Helper function to call Claude with streaming
+async function callClaudeWithStreaming(
+  prompt: string,
+  systemPrompt: string
+): Promise<string> {
+  console.log("API Calcul: Starting Claude streaming call");
+
+  let accumulatedResponse = "";
+  let thinkingContent = "";
+  let mainContent = "";
+
+  try {
+    const stream = await anthropic.messages.create({
+      model: "claude-3-7-sonnet-20250219",
+      max_tokens: 64000,
+      temperature: 1,
+      system:
+        systemPrompt +
+        "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
+      messages: [{ role: "user", content: prompt }],
+      thinking: {
+        type: "enabled",
+        budget_tokens: 16000,
+      },
+      stream: true,
+    });
+
+    console.log("API Calcul: Claude stream created, processing chunks");
+
+    for await (const chunk of stream as any) {
+      if (chunk.type === "content_block_start") {
+        console.log(
+          `API Calcul: Content block started - Index: ${chunk.index}, Type: ${chunk.content_block.type}`
+        );
+      } else if (chunk.type === "content_block_delta") {
+        if (chunk.index === 0) {
+          // This is the thinking content
+          thinkingContent += chunk.delta.text;
+        } else if (chunk.index === 1) {
+          // This is the main response content
+          mainContent += chunk.delta.text;
+          accumulatedResponse += chunk.delta.text;
+        }
+      } else if (chunk.type === "content_block_stop") {
+        console.log(
+          `API Calcul: Content block stopped - Index: ${chunk.index}`
+        );
+      }
+    }
+
+    console.log("API Calcul: Streaming completed");
+    console.log(`API Calcul: Thinking content length: ${thinkingContent}`);
+    console.log(`API Calcul: Main content length: ${mainContent}`);
+
+    return mainContent;
+  } catch (error) {
+    console.error("API Calcul: Error during streaming:", error);
+    throw error;
+  }
+}
+
+// Helper function to call Claude without streaming for JSON validation
+async function callClaudeForJSONValidation(
+  invalidJSON: string,
+  error: string,
+  optionsCount: number,
+  selectedThemes: string[]
+): Promise<string> {
+  console.log("API Calcul: Calling Claude for JSON validation");
+
+  const validationPrompt = `Le JSON suivant est invalide ou mal formaté:
+
+${invalidJSON}
+
+Erreur rencontrée: ${error}
+
+Corrige ce JSON pour qu'il soit valide et respecte exactement cette structure:
+{
+  "title": "string",
+  "introduction": "string",
+  "exercises": [
+    {
+      "question": "string",
+      "options": {
+        ${Array.from(
+          { length: optionsCount },
+          (_, i) => `"${String.fromCharCode(65 + i)}": "string"`
+        ).join(",\n        ")}
+      },
+      "answer": "string (une des lettres des options)",
+      "theme": "string (un des thèmes suivants: ${selectedThemes.join(", ")})",
+      "explanation": "string (optionnel)",
+      "shortExplanation": "string (optionnel)",
+      "image": "string (optionnel)"
+    }
+  ],
+  "conclusion": "string"
+}
+
+IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou après.`;
+
+  const msg: any = await anthropic.messages.create({
+    model: "claude-3-7-sonnet-20250219",
+    max_tokens: 64000,
+    temperature: 0.3,
+    system:
+      "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
+    messages: [{ role: "user", content: validationPrompt }],
+    thinking: {
+      type: "enabled",
+      budget_tokens: 10000,
+    },
+  });
+
+  console.log("API Calcul: Claude JSON validation response received");
+  return msg.content[1].text || "{}";
+}
+
 export async function POST(request: NextRequest) {
   console.log("API Calcul: Generate endpoint called");
   try {
@@ -260,7 +492,7 @@ ${
   correctionType !== "sansCorrection"
     ? correctionType === "correctionCourte"
       ? "5. Une courte explication (shortExplanation) qui indique brièvement la méthode de résolution"
-      : "5. Une explication détaillée (explanation) qui donne la solution complète pas à pas"
+      : "5. Une explication un peu plus détaillée (explanation) qui donne la solution complète pas à pas mais pas trop longue non plus"
     : ""
 }
 
@@ -323,61 +555,85 @@ ${
       console.log("API Calcul: OpenAI response received successfully");
       rawResponse = completion.choices[0].message.content || "{}";
     } else {
-      // Use Claude with thinking enabled
-      const msg: any = await anthropic.messages.create({
-        model: "claude-3-7-sonnet-20250219",
-        max_tokens: 64000,
-        temperature: 1,
-        system:
-          systemPrompt +
-          "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
-        messages: [{ role: "user", content: prompt }],
-        thinking: {
-          type: "enabled",
-          budget_tokens: 50000,
-        },
-      });
+      // Use Claude with streaming
+      try {
+        rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
+        console.log("API Calcul: Claude streaming completed");
+        console.log(`API Calcul: Raw response length: ${rawResponse.length}`);
 
-      console.log("API Calcul: Claude response received successfully");
-      rawResponse = msg.content[1].text || "{}";
-    }
+        // Extract JSON from the response
+        rawResponse = extractJSON(rawResponse);
 
-    // Additional processing for Claude responses to ensure valid JSON
-    if (llmModel === "claude") {
-      // Try to extract JSON from Claude's response (it might contain markdown code blocks or additional text)
-      console.log("API Calcul: Processing Claude response to extract JSON");
+        // Try to parse the JSON
+        try {
+          generatedContent = JSON.parse(rawResponse);
+          console.log(
+            "API Calcul: Successfully parsed JSON from streaming response"
+          );
+        } catch (parseError) {
+          console.error(
+            "API Calcul: Failed to parse JSON from streaming response:",
+            parseError
+          );
+          console.log(
+            "API Calcul: Attempting to fix JSON with second Claude call"
+          );
 
-      // Check if response is wrapped in a code block
-      const jsonMatch = rawResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (jsonMatch && jsonMatch[1]) {
-        rawResponse = jsonMatch[1].trim();
+          // Make a second call to Claude to fix the JSON
+          const fixedJSON = await callClaudeForJSONValidation(
+            rawResponse,
+            String(parseError),
+            optionsCount,
+            selectedThemes
+          );
+
+          // Extract JSON from the fixed response
+          const cleanedJSON = extractJSON(fixedJSON);
+
+          try {
+            generatedContent = JSON.parse(cleanedJSON);
+            console.log("API Calcul: Successfully parsed fixed JSON");
+          } catch (secondParseError) {
+            console.error(
+              "API Calcul: Failed to parse fixed JSON:",
+              secondParseError
+            );
+            throw new Error(
+              "Unable to generate valid JSON after multiple attempts"
+            );
+          }
+        }
+      } catch (error) {
+        console.error("API Calcul: Error in Claude streaming process:", error);
+        throw error;
       }
+    }
 
-      // Remove any text before or after the JSON object
-      const jsonObjectMatch = rawResponse.match(/\{[\s\S]*\}/);
-      if (jsonObjectMatch) {
-        rawResponse = jsonObjectMatch[0];
+    // If we're using OpenAI or if generatedContent wasn't set above
+    if (!generatedContent && llmModel === "openai") {
+      try {
+        generatedContent = JSON.parse(rawResponse);
+        console.log("API Calcul: Parsed generated content successfully");
+      } catch (parseError) {
+        console.error("API Calcul: Error parsing LLM response:", parseError);
+        console.log("API Calcul: Raw LLM response:", rawResponse);
+        return NextResponse.json(
+          {
+            error:
+              "Failed to parse LLM response. The model did not return valid JSON.",
+            details: String(parseError),
+          },
+          { status: 500 }
+        );
       }
-
-      console.log("API Calcul: Claude response processed");
     }
 
-    try {
-      // Parse the raw JSON response
-      generatedContent = JSON.parse(rawResponse);
-      console.log("API Calcul: Parsed generated content successfully");
-    } catch (parseError) {
-      console.error("API Calcul: Error parsing LLM response:", parseError);
-      console.log("API Calcul: Raw LLM response:", rawResponse);
-      return NextResponse.json(
-        {
-          error:
-            "Failed to parse LLM response. The model did not return valid JSON.",
-          details: String(parseError),
-        },
-        { status: 500 }
-      );
-    }
+    // Validate and fix the content structure
+    generatedContent = validateAndFixContent(
+      generatedContent,
+      optionLetters,
+      selectedThemes
+    );
 
     // Validate the generated content against our schema
     const contentValidation =
@@ -388,119 +644,28 @@ ${
         JSON.stringify(contentValidation.error)
       );
 
-      // Attempt to fix the content structure
-      console.log("API Calcul: Attempting to fix content structure");
-
-      // Ensure all required fields are present
-      if (!generatedContent.title) {
-        generatedContent.title = `Exercices de calcul TAGE MAGE - ${niveau}`;
-      }
-      if (!generatedContent.introduction) {
-        generatedContent.introduction = `Voici une série d'exercices pour vous préparer à la section calcul du TAGE MAGE.`;
-      }
-      if (!generatedContent.conclusion) {
-        generatedContent.conclusion = "Fin des exercices. Bonne préparation !";
-      }
-
-      // Ensure exercises is an array
+      // Check if we have no valid exercises
       if (
         !generatedContent.exercises ||
-        !Array.isArray(generatedContent.exercises)
+        generatedContent.exercises.length === 0
       ) {
-        generatedContent.exercises = [];
-        // If we have no valid exercises, return an error
-        if (generatedContent.exercises.length === 0) {
-          return NextResponse.json(
-            {
-              error:
-                "La génération n'a pas produit d'exercices valides. Veuillez réessayer.",
-              details: "No valid exercises found in the generated content.",
-            },
-            { status: 500 }
-          );
-        }
-      }
-
-      // Revalidate after fixes
-      const revalidation = GeneratedContentSchema.safeParse(generatedContent);
-      if (!revalidation.success) {
         return NextResponse.json(
           {
             error:
-              "La structure du contenu généré reste invalide après corrections.",
-            details: revalidation.error,
+              "La génération n'a pas produit d'exercices valides. Veuillez réessayer.",
+            details: "No valid exercises found in the generated content.",
           },
           { status: 500 }
         );
       }
-    }
 
-    // Normalize and clean up the exercises
-    if (
-      generatedContent.exercises &&
-      Array.isArray(generatedContent.exercises)
-    ) {
-      generatedContent.exercises = generatedContent.exercises.map(
-        (exercise: any, _index: number) => {
-          // Ensure question is a string
-          if (typeof exercise.question !== "string") {
-            exercise.question = String(exercise.question || "");
-          }
-
-          // Clean up the question to remove unnecessary mentions
-          exercise.question = exercise.question
-            .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
-            .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
-
-          // Ensure options are present and are strings
-          if (!exercise.options) {
-            exercise.options = {};
-            optionLetters.forEach((letter) => {
-              exercise.options[letter] = "";
-            });
-          } else {
-            // Ensure all requested options are present
-            optionLetters.forEach((letter) => {
-              if (!exercise.options[letter]) {
-                exercise.options[letter] = "";
-              } else if (typeof exercise.options[letter] !== "string") {
-                exercise.options[letter] = String(exercise.options[letter]);
-              }
-            });
-
-            // Remove any extra options beyond what was requested
-            Object.keys(exercise.options).forEach((key) => {
-              if (!optionLetters.includes(key)) {
-                delete exercise.options[key];
-              }
-            });
-          }
-
-          // Ensure answer is a string and is a valid option
-          if (!exercise.answer) {
-            exercise.answer = optionLetters[0]; // Default to first option
-          } else if (typeof exercise.answer !== "string") {
-            exercise.answer = String(exercise.answer);
-          }
-
-          // Ensure answer is among valid options
-          if (!optionLetters.includes(exercise.answer)) {
-            exercise.answer = optionLetters[0];
-          }
-
-          // Ensure theme is present and valid
-          if (!exercise.theme || typeof exercise.theme !== "string") {
-            // Assign a random theme from selected themes
-            exercise.theme =
-              selectedThemes[Math.floor(Math.random() * selectedThemes.length)];
-          } else if (!selectedThemes.includes(exercise.theme)) {
-            // If theme is not in selected themes, reassign
-            exercise.theme =
-              selectedThemes[Math.floor(Math.random() * selectedThemes.length)];
-          }
-
-          return exercise;
-        }
+      return NextResponse.json(
+        {
+          error:
+            "La structure du contenu généré reste invalide après corrections.",
+          details: contentValidation.error,
+        },
+        { status: 500 }
       );
     }
 
@@ -524,10 +689,17 @@ ${
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Pass through authentication headers from the original request
+        ...(request.headers.get("authorization") && {
+          authorization: request.headers.get("authorization")!,
+        }),
+        ...(request.headers.get("cookie") && {
+          cookie: request.headers.get("cookie")!,
+        }),
+        // Add any other auth headers your app uses
       },
       body: JSON.stringify(docxPayload),
     });
-
     console.log(
       "API Calcul: DOCX generation response status:",
       response.status
