@@ -17,6 +17,7 @@ const openai = new OpenAI({
 // Initialize Anthropic
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+  timeout: 900000,
 });
 
 // Define validation schema for request body
@@ -56,6 +57,273 @@ const GeneratedContentSchema = z.object({
   conclusion: z.string(),
 });
 
+// Helper function to process exercise text and extract replacements
+function processExerciseText(text: string) {
+  const replacements: string[] = [];
+  // Extract text within brackets [like this]
+  const regex = /\[(.*?)\]/g;
+  let match;
+  let processedText = text;
+
+  while ((match = regex.exec(text)) !== null) {
+    replacements.push(match[1]);
+  }
+
+  // Remove the brackets for display
+  processedText = text.replace(/\[(.*?)\]/g, "$1");
+
+  return { processedText, replacements };
+}
+
+// Helper function to extract JSON from text
+function extractJSON(text: string): string {
+  console.log("API Expression: Attempting to extract JSON from text");
+
+  // Check if response is wrapped in a code block
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (jsonMatch && jsonMatch[1]) {
+    console.log("API Expression: Found JSON in code block");
+    return jsonMatch[1].trim();
+  }
+
+  // Remove any text before or after the JSON object
+  const jsonObjectMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonObjectMatch) {
+    console.log("API Expression: Found JSON object in text");
+    return jsonObjectMatch[0];
+  }
+
+  console.log("API Expression: No JSON pattern found, returning original text");
+  return text;
+}
+
+// Helper function to validate and fix content structure
+function validateAndFixContent(
+  content: any,
+  optionLetters: string[],
+  niveau: string
+) {
+  console.log("API Expression: Validating and fixing content structure");
+
+  // Ensure all required fields are present
+  if (!content.title) {
+    content.title = `Exercices d'expression TAGE MAGE - ${niveau}`;
+  }
+  if (!content.introduction) {
+    content.introduction = `Voici une série d'exercices pour vous préparer à la section expression du TAGE MAGE.`;
+  }
+  if (!content.conclusion) {
+    content.conclusion = "Fin des exercices. Bonne préparation !";
+  }
+
+  // Ensure exercises is an array
+  if (!content.exercises || !Array.isArray(content.exercises)) {
+    console.log("API Expression: No valid exercises array found");
+    content.exercises = [];
+  }
+
+  // Process each exercise to ensure it has the required fields
+  content.exercises = content.exercises.map((exercise: any, index: number) => {
+    console.log(`API Expression: Processing exercise ${index + 1}`);
+
+    // Ensure question is a string
+    if (typeof exercise.question !== "string") {
+      exercise.question = String(exercise.question || "");
+    }
+
+    // Clean up the question to remove unnecessary mentions
+    exercise.question = exercise.question
+      .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
+      .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
+
+    // Process question to find and mark replacements if not already done
+    if (!exercise.replacements || !Array.isArray(exercise.replacements)) {
+      const { processedText, replacements } = processExerciseText(
+        exercise.question || ""
+      );
+      exercise.question = processedText;
+      exercise.replacements = replacements;
+    }
+
+    // Set replacementCount if not present
+    if (typeof exercise.replacementCount !== "number") {
+      exercise.replacementCount = exercise.replacements?.length || 0;
+    }
+
+    // Ensure replacementCount is valid
+    if (exercise.replacementCount < 0 || exercise.replacementCount > 3) {
+      exercise.replacementCount = Math.min(
+        3,
+        Math.max(0, exercise.replacements?.length || 0)
+      );
+    }
+
+    // Ensure options are present and are strings
+    if (!exercise.options) {
+      exercise.options = {};
+      optionLetters.forEach((letter) => {
+        exercise.options[letter] = "";
+      });
+    } else {
+      // Ensure all requested options are present
+      optionLetters.forEach((letter) => {
+        if (!exercise.options[letter]) {
+          exercise.options[letter] = "";
+        } else if (typeof exercise.options[letter] !== "string") {
+          exercise.options[letter] = String(exercise.options[letter]);
+        }
+      });
+
+      // Remove any extra options beyond what was requested
+      Object.keys(exercise.options).forEach((key) => {
+        if (!optionLetters.includes(key)) {
+          delete exercise.options[key];
+        }
+      });
+    }
+
+    // Ensure answer is a string and is a valid option
+    if (!exercise.answer) {
+      exercise.answer = optionLetters[0]; // Default to first option
+    } else if (typeof exercise.answer !== "string") {
+      exercise.answer = String(exercise.answer);
+    }
+
+    // Ensure answer is among valid options
+    if (!optionLetters.includes(exercise.answer)) {
+      exercise.answer = optionLetters[0];
+    }
+
+    // Ensure replacements array is present
+    if (!exercise.replacements || !Array.isArray(exercise.replacements)) {
+      exercise.replacements = [];
+    }
+
+    return exercise;
+  });
+
+  return content;
+}
+
+// Helper function to call Claude with streaming
+async function callClaudeWithStreaming(
+  prompt: string,
+  systemPrompt: string
+): Promise<string> {
+  console.log("API Expression: Starting Claude streaming call");
+
+  let accumulatedResponse = "";
+  let thinkingContent = "";
+  let mainContent = "";
+
+  try {
+    const stream = await anthropic.messages.create({
+      model: "claude-3-7-sonnet-20250219",
+      max_tokens: 20000,
+      temperature: 1,
+      system:
+        systemPrompt +
+        "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
+      messages: [{ role: "user", content: prompt }],
+      thinking: {
+        type: "enabled",
+        budget_tokens: 16000,
+      },
+      stream: true,
+    });
+
+    console.log("API Expression: Claude stream created, processing chunks");
+
+    for await (const chunk of stream as any) {
+      if (chunk.type === "content_block_start") {
+        console.log(
+          `API Expression: Content block started - Index: ${chunk.index}, Type: ${chunk.content_block.type}`
+        );
+      } else if (chunk.type === "content_block_delta") {
+        if (chunk.index === 0) {
+          // This is the thinking content
+          thinkingContent += chunk.delta.text;
+        } else if (chunk.index === 1) {
+          // This is the main response content
+          mainContent += chunk.delta.text;
+          accumulatedResponse += chunk.delta.text;
+        }
+      } else if (chunk.type === "content_block_stop") {
+        console.log(
+          `API Expression: Content block stopped - Index: ${chunk.index}`
+        );
+      }
+    }
+
+    console.log("API Expression: Streaming completed");
+    console.log(
+      `API Expression: Thinking content length: ${thinkingContent.length}`
+    );
+    console.log(`API Expression: Main content length: ${mainContent.length}`);
+
+    return mainContent;
+  } catch (error) {
+    console.error("API Expression: Error during streaming:", error);
+    throw error;
+  }
+}
+
+// Helper function to call Claude without streaming for JSON validation
+async function callClaudeForJSONValidation(
+  invalidJSON: string,
+  error: string,
+  optionsCount: number
+): Promise<string> {
+  console.log("API Expression: Calling Claude for JSON validation");
+
+  const validationPrompt = `Le JSON suivant est invalide ou mal formaté:
+
+${invalidJSON}
+
+Erreur rencontrée: ${error}
+
+Corrige ce JSON pour qu'il soit valide et respecte exactement cette structure:
+{
+  "title": "string",
+  "introduction": "string",
+  "exercises": [
+    {
+      "question": "string (avec les mots à remplacer entre [crochets] si nécessaire)",
+      "replacementCount": 0-3,
+      "replacements": ["mot1", "mot2", "mot3"],
+      "options": {
+        ${Array.from(
+          { length: optionsCount },
+          (_, i) => `"${String.fromCharCode(65 + i)}": "string"`
+        ).join(",\n        ")}
+      },
+      "answer": "string (une des lettres des options)",
+      "explanation": "string (optionnel)",
+      "shortExplanation": "string (optionnel)"
+    }
+  ],
+  "conclusion": "string"
+}
+
+IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou après.`;
+
+  const msg: any = await anthropic.messages.create({
+    model: "claude-3-7-sonnet-20250219",
+    max_tokens: 20000,
+    temperature: 0.3,
+    system:
+      "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
+    messages: [{ role: "user", content: validationPrompt }],
+    thinking: {
+      type: "enabled",
+      budget_tokens: 10000,
+    },
+  });
+
+  console.log("API Expression: Claude JSON validation response received");
+  return msg.content[1].text || "{}";
+}
+
 export async function POST(request: NextRequest) {
   console.log("API Expression: Generate endpoint called");
   try {
@@ -91,19 +359,22 @@ export async function POST(request: NextRequest) {
       selectedThemes,
     } = validationResult.data;
 
-    console.log("API Expression: Request validated successfully with parameters:", {
-      userId,
-      sousTest,
-      niveau,
-      variationCount,
-      ineditsCount,
-      correctionType,
-      questionCount,
-      outputFormat,
-      llmModel,
-      optionsCount,
-      selectedThemes,
-    });
+    console.log(
+      "API Expression: Request validated successfully with parameters:",
+      {
+        userId,
+        sousTest,
+        niveau,
+        variationCount,
+        ineditsCount,
+        correctionType,
+        questionCount,
+        outputFormat,
+        llmModel,
+        optionsCount,
+        selectedThemes,
+      }
+    );
 
     console.log("API Expression: Initializing Supabase admin client");
     // Create Supabase client
@@ -111,9 +382,7 @@ export async function POST(request: NextRequest) {
     console.log("API Expression: Supabase admin client created successfully");
 
     // Retrieve random exercises from the database
-    console.log(
-      "API Expression: Fetching random exercises from database"
-    );
+    console.log("API Expression: Fetching random exercises from database");
 
     // Execute the query to get examples
     const { data: randomExercises, error: fetchError } = await supabase
@@ -145,29 +414,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process and extract the replacements from the exercise texts
-    const processExerciseText = (text: string) => {
-      const replacements: string[] = [];
-      // Extract text within brackets [like this]
-      const regex = /\[(.*?)\]/g;
-      let match;
-      let processedText = text;
-      
-      while ((match = regex.exec(text)) !== null) {
-        replacements.push(match[1]);
-      }
-      
-      // Remove the brackets for display
-      processedText = text.replace(/\[(.*?)\]/g, "$1");
-      
-      return { processedText, replacements };
-    };
-
     // Prepare exercise examples for the prompt
     const exercisesExamples = randomExercises.map((exercise) => {
       // Process the question text to extract replacements
-      const { processedText, replacements } = processExerciseText(exercise.Énoncé || "");
-      
+      const { processedText, replacements } = processExerciseText(
+        exercise.Énoncé || ""
+      );
+
       return {
         question: processedText,
         options: {
@@ -336,61 +589,92 @@ ${
       console.log("API Expression: OpenAI response received successfully");
       rawResponse = completion.choices[0].message.content || "{}";
     } else {
-      // Use Claude with thinking enabled
-      const msg: any = await anthropic.messages.create({
-        model: "claude-3-7-sonnet-20250219",
-        max_tokens: 20000,
-        temperature: 1,
-        system:
-          systemPrompt +
-          "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
-        messages: [{ role: "user", content: prompt }],
-        thinking: {
-          type: "enabled",
-          budget_tokens: 16000,
-        },
-      });
+      // Use Claude with streaming
+      try {
+        rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
+        console.log("API Expression: Claude streaming completed");
+        console.log(
+          `API Expression: Raw response length: ${rawResponse.length}`
+        );
 
-      console.log("API Expression: Claude response received successfully");
-      rawResponse = msg.content[1].text || "{}";
-    }
+        // Extract JSON from the response
+        rawResponse = extractJSON(rawResponse);
 
-    // Additional processing for Claude responses to ensure valid JSON
-    if (llmModel === "claude") {
-      // Try to extract JSON from Claude's response (it might contain markdown code blocks or additional text)
-      console.log("API Expression: Processing Claude response to extract JSON");
+        // Try to parse the JSON
+        try {
+          generatedContent = JSON.parse(rawResponse);
+          console.log(
+            "API Expression: Successfully parsed JSON from streaming response"
+          );
+        } catch (parseError) {
+          console.error(
+            "API Expression: Failed to parse JSON from streaming response:",
+            parseError
+          );
+          console.log(
+            "API Expression: Attempting to fix JSON with second Claude call"
+          );
 
-      // Check if response is wrapped in a code block
-      const jsonMatch = rawResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (jsonMatch && jsonMatch[1]) {
-        rawResponse = jsonMatch[1].trim();
+          // Make a second call to Claude to fix the JSON
+          const fixedJSON = await callClaudeForJSONValidation(
+            rawResponse,
+            String(parseError),
+            optionsCount
+          );
+
+          // Extract JSON from the fixed response
+          const cleanedJSON = extractJSON(fixedJSON);
+
+          try {
+            generatedContent = JSON.parse(cleanedJSON);
+            console.log("API Expression: Successfully parsed fixed JSON");
+          } catch (secondParseError) {
+            console.error(
+              "API Expression: Failed to parse fixed JSON:",
+              secondParseError
+            );
+            throw new Error(
+              "Unable to generate valid JSON after multiple attempts"
+            );
+          }
+        }
+      } catch (error) {
+        console.error(
+          "API Expression: Error in Claude streaming process:",
+          error
+        );
+        throw error;
       }
+    }
 
-      // Remove any text before or after the JSON object
-      const jsonObjectMatch = rawResponse.match(/\{[\s\S]*\}/);
-      if (jsonObjectMatch) {
-        rawResponse = jsonObjectMatch[0];
+    // If we're using OpenAI or if generatedContent wasn't set above
+    if (!generatedContent && llmModel === "openai") {
+      try {
+        generatedContent = JSON.parse(rawResponse);
+        console.log("API Expression: Parsed generated content successfully");
+      } catch (parseError) {
+        console.error(
+          "API Expression: Error parsing LLM response:",
+          parseError
+        );
+        console.log("API Expression: Raw LLM response:", rawResponse);
+        return NextResponse.json(
+          {
+            error:
+              "Failed to parse LLM response. The model did not return valid JSON.",
+            details: String(parseError),
+          },
+          { status: 500 }
+        );
       }
-
-      console.log("API Expression: Claude response processed");
     }
 
-    try {
-      // Parse the raw JSON response
-      generatedContent = JSON.parse(rawResponse);
-      console.log("API Expression: Parsed generated content successfully");
-    } catch (parseError) {
-      console.error("API Expression: Error parsing LLM response:", parseError);
-      console.log("API Expression: Raw LLM response:", rawResponse);
-      return NextResponse.json(
-        {
-          error:
-            "Failed to parse LLM response. The model did not return valid JSON.",
-          details: String(parseError),
-        },
-        { status: 500 }
-      );
-    }
+    // Validate and fix the content structure
+    generatedContent = validateAndFixContent(
+      generatedContent,
+      optionLetters,
+      niveau
+    );
 
     // Validate the generated content against our schema
     const contentValidation =
@@ -401,142 +685,38 @@ ${
         JSON.stringify(contentValidation.error)
       );
 
-      // Attempt to fix the content structure
-      console.log("API Expression: Attempting to fix content structure");
-
-      // Ensure all required fields are present
-      if (!generatedContent.title) {
-        generatedContent.title = `Exercices d'expression TAGE MAGE - ${niveau}`;
-      }
-      if (!generatedContent.introduction) {
-        generatedContent.introduction = `Voici une série d'exercices pour vous préparer à la section expression du TAGE MAGE.`;
-      }
-      if (!generatedContent.conclusion) {
-        generatedContent.conclusion = "Fin des exercices. Bonne préparation !";
-      }
-
-      // Ensure exercises is an array
+      // Check if we have no valid exercises
       if (
         !generatedContent.exercises ||
-        !Array.isArray(generatedContent.exercises)
+        generatedContent.exercises.length === 0
       ) {
-        generatedContent.exercises = [];
-        // If we have no valid exercises, return an error
-        if (generatedContent.exercises.length === 0) {
-          return NextResponse.json(
-            {
-              error:
-                "La génération n'a pas produit d'exercices valides. Veuillez réessayer.",
-              details: "No valid exercises found in the generated content.",
-            },
-            { status: 500 }
-          );
-        }
-      }
-
-      // Process each exercise to ensure it has the required fields
-      generatedContent.exercises = generatedContent.exercises.map((exercise: any, index: number) => {
-        // Process question to find and mark replacements if not already done
-        if (!exercise.replacements || !Array.isArray(exercise.replacements)) {
-          const { processedText, replacements } = processExerciseText(exercise.question || "");
-          exercise.question = processedText;
-          exercise.replacements = replacements;
-        }
-        
-        // Set replacementCount if not present
-        if (typeof exercise.replacementCount !== 'number') {
-          exercise.replacementCount = exercise.replacements?.length || 0;
-        }
-        
-        return exercise;
-      });
-
-      // Revalidate after fixes
-      const revalidation = GeneratedContentSchema.safeParse(generatedContent);
-      if (!revalidation.success) {
         return NextResponse.json(
           {
             error:
-              "La structure du contenu généré reste invalide après corrections.",
-            details: revalidation.error,
+              "La génération n'a pas produit d'exercices valides. Veuillez réessayer.",
+            details: "No valid exercises found in the generated content.",
           },
           { status: 500 }
         );
       }
-    }
 
-    // Normalize and clean up the exercises
-    if (
-      generatedContent.exercises &&
-      Array.isArray(generatedContent.exercises)
-    ) {
-      generatedContent.exercises = generatedContent.exercises.map(
-        (exercise: any, _index: number) => {
-          // Ensure question is a string
-          if (typeof exercise.question !== "string") {
-            exercise.question = String(exercise.question || "");
-          }
-
-          // Clean up the question to remove unnecessary mentions
-          exercise.question = exercise.question
-            .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
-            .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
-
-          // Ensure options are present and are strings
-          if (!exercise.options) {
-            exercise.options = {};
-            optionLetters.forEach((letter) => {
-              exercise.options[letter] = "";
-            });
-          } else {
-            // Ensure all requested options are present
-            optionLetters.forEach((letter) => {
-              if (!exercise.options[letter]) {
-                exercise.options[letter] = "";
-              } else if (typeof exercise.options[letter] !== "string") {
-                exercise.options[letter] = String(exercise.options[letter]);
-              }
-            });
-
-            // Remove any extra options beyond what was requested
-            Object.keys(exercise.options).forEach((key) => {
-              if (!optionLetters.includes(key)) {
-                delete exercise.options[key];
-              }
-            });
-          }
-
-          // Ensure answer is a string and is a valid option
-          if (!exercise.answer) {
-            exercise.answer = optionLetters[0]; // Default to first option
-          } else if (typeof exercise.answer !== "string") {
-            exercise.answer = String(exercise.answer);
-          }
-
-          // Ensure answer is among valid options
-          if (!optionLetters.includes(exercise.answer)) {
-            exercise.answer = optionLetters[0];
-          }
-
-          // Ensure replacementCount is valid
-          if (typeof exercise.replacementCount !== 'number' || exercise.replacementCount < 0 || exercise.replacementCount > 3) {
-            exercise.replacementCount = exercise.replacements?.length || 0;
-          }
-
-          // Ensure replacements array is present
-          if (!exercise.replacements || !Array.isArray(exercise.replacements)) {
-            exercise.replacements = [];
-          }
-
-          return exercise;
-        }
+      return NextResponse.json(
+        {
+          error:
+            "La structure du contenu généré reste invalide après corrections.",
+          details: contentValidation.error,
+        },
+        { status: 500 }
       );
     }
 
     // Use the specialized DOCX generator for expression
     console.log("API Expression: Generating DOCX document");
     const docxEndpoint = `${request.nextUrl.origin}/api/generate/docx/expression`;
-    console.log("API Expression: Calling specialized DOCX endpoint for expression:", docxEndpoint);
+    console.log(
+      "API Expression: Calling specialized DOCX endpoint for expression:",
+      docxEndpoint
+    );
 
     const docxPayload = {
       userId,

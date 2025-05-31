@@ -17,6 +17,7 @@ const openai = new OpenAI({
 // Initialize Anthropic
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+  timeout: 900000,
 });
 
 // Define validation schema for request body
@@ -55,6 +56,223 @@ const GeneratedContentSchema = z.object({
   ),
   conclusion: z.string(),
 });
+
+// Helper function to extract JSON from text
+function extractJSON(text: string): string {
+  console.log("API CondMin: Attempting to extract JSON from text");
+
+  // Check if response is wrapped in a code block
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (jsonMatch && jsonMatch[1]) {
+    console.log("API CondMin: Found JSON in code block");
+    return jsonMatch[1].trim();
+  }
+
+  // Remove any text before or after the JSON object
+  const jsonObjectMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonObjectMatch) {
+    console.log("API CondMin: Found JSON object in text");
+    return jsonObjectMatch[0];
+  }
+
+  console.log("API CondMin: No JSON pattern found, returning original text");
+  return text;
+}
+
+// Helper function to validate and fix content structure
+function validateAndFixContent(
+  content: any,
+  selectedThemes: string[],
+  niveau: string
+) {
+  console.log("API CondMin: Validating and fixing content structure");
+
+  // Ensure all required fields are present
+  if (!content.title) {
+    content.title = `Exercices de Conditions Minimales TAGE MAGE - ${niveau}`;
+  }
+  if (!content.introduction) {
+    content.introduction = `Voici une série d'exercices pour vous préparer à la section Conditions Minimales du TAGE MAGE. Pour chaque question, déterminez quelle(s) information(s) est/sont suffisante(s) pour y répondre.`;
+  }
+  if (!content.conclusion) {
+    content.conclusion = "Fin des exercices. Bonne préparation !";
+  }
+
+  // Ensure exercises is an array
+  if (!content.exercises || !Array.isArray(content.exercises)) {
+    console.log("API CondMin: No valid exercises array found");
+    content.exercises = [];
+  }
+
+  // Normalize and clean up the exercises
+  content.exercises = content.exercises.map((exercise: any, index: number) => {
+    console.log(`API CondMin: Processing exercise ${index + 1}`);
+
+    // Ensure question is a string
+    if (typeof exercise.question !== "string") {
+      exercise.question = String(exercise.question || "");
+    }
+
+    // Clean up the question to remove unnecessary mentions
+    exercise.question = exercise.question
+      .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
+      .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
+
+    // Ensure info1 and info2 are present and are strings
+    if (!exercise.info1) {
+      exercise.info1 = "Information 1 manquante";
+    } else if (typeof exercise.info1 !== "string") {
+      exercise.info1 = String(exercise.info1);
+    }
+
+    if (!exercise.info2) {
+      exercise.info2 = "Information 2 manquante";
+    } else if (typeof exercise.info2 !== "string") {
+      exercise.info2 = String(exercise.info2);
+    }
+
+    // Ensure answer is a string
+    if (!exercise.answer) {
+      exercise.answer = "A"; // Default answer
+    } else if (typeof exercise.answer !== "string") {
+      exercise.answer = String(exercise.answer);
+    }
+
+    // Ensure answer is a valid option (A-E)
+    if (!["A", "B", "C", "D", "E"].includes(exercise.answer)) {
+      exercise.answer = "A";
+    }
+
+    // Ensure theme is present and valid
+    if (!exercise.theme || typeof exercise.theme !== "string") {
+      // Assign a random theme from selected themes
+      exercise.theme =
+        selectedThemes[Math.floor(Math.random() * selectedThemes.length)];
+    } else if (!selectedThemes.includes(exercise.theme)) {
+      // If theme is not in selected themes, reassign
+      exercise.theme =
+        selectedThemes[Math.floor(Math.random() * selectedThemes.length)];
+    }
+
+    return exercise;
+  });
+
+  return content;
+}
+
+// Helper function to call Claude with streaming
+async function callClaudeWithStreaming(
+  prompt: string,
+  systemPrompt: string
+): Promise<string> {
+  console.log("API CondMin: Starting Claude streaming call");
+
+  let accumulatedResponse = "";
+  let thinkingContent = "";
+  let mainContent = "";
+
+  try {
+    const stream = await anthropic.messages.create({
+      model: "claude-3-7-sonnet-20250219",
+      max_tokens: 20000,
+      temperature: 1,
+      system:
+        systemPrompt +
+        "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
+      messages: [{ role: "user", content: prompt }],
+      thinking: {
+        type: "enabled",
+        budget_tokens: 16000,
+      },
+      stream: true,
+    });
+
+    console.log("API CondMin: Claude stream created, processing chunks");
+
+    for await (const chunk of stream as any) {
+      if (chunk.type === "content_block_start") {
+        console.log(
+          `API CondMin: Content block started - Index: ${chunk.index}, Type: ${chunk.content_block.type}`
+        );
+      } else if (chunk.type === "content_block_delta") {
+        if (chunk.index === 0) {
+          // This is the thinking content
+          thinkingContent += chunk.delta.text;
+        } else if (chunk.index === 1) {
+          // This is the main response content
+          mainContent += chunk.delta.text;
+          accumulatedResponse += chunk.delta.text;
+        }
+      } else if (chunk.type === "content_block_stop") {
+        console.log(
+          `API CondMin: Content block stopped - Index: ${chunk.index}`
+        );
+      }
+    }
+
+    console.log("API CondMin: Streaming completed");
+    console.log(
+      `API CondMin: Thinking content length: ${thinkingContent.length}`
+    );
+    console.log(`API CondMin: Main content length: ${mainContent.length}`);
+
+    return mainContent;
+  } catch (error) {
+    console.error("API CondMin: Error during streaming:", error);
+    throw error;
+  }
+}
+
+// Helper function to call Claude without streaming for JSON validation
+async function callClaudeForJSONValidation(
+  invalidJSON: string,
+  error: string,
+  selectedThemes: string[]
+): Promise<string> {
+  console.log("API CondMin: Calling Claude for JSON validation");
+
+  const validationPrompt = `Le JSON suivant est invalide ou mal formaté:
+
+${invalidJSON}
+
+Erreur rencontrée: ${error}
+
+Corrige ce JSON pour qu'il soit valide et respecte exactement cette structure:
+{
+  "title": "string",
+  "introduction": "string",
+  "exercises": [
+    {
+      "question": "string",
+      "info1": "string",
+      "info2": "string",
+      "answer": "string (A, B, C, D ou E)",
+      "theme": "string (un des thèmes suivants: ${selectedThemes.join(", ")})",
+      "explanation": "string (optionnel)",
+      "shortExplanation": "string (optionnel)"
+    }
+  ],
+  "conclusion": "string"
+}
+
+IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou après.`;
+
+  const msg: any = await anthropic.messages.create({
+    model: "claude-3-7-sonnet-20250219",
+    max_tokens: 20000,
+    temperature: 0.3,
+    system:
+      "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
+    messages: [{ role: "user", content: validationPrompt }],
+    thinking: {
+      type: "enabled",
+      budget_tokens: 10000,
+    },
+  });
+
+  console.log("API CondMin: Claude JSON validation response received");
+  return msg.content[1].text || "{}";
+}
 
 export async function POST(request: NextRequest) {
   console.log("API CondMin: Generate endpoint called");
@@ -307,61 +525,84 @@ ${
       console.log("API CondMin: OpenAI response received successfully");
       rawResponse = completion.choices[0].message.content || "{}";
     } else {
-      // Use Claude with thinking enabled
-      const msg: any = await anthropic.messages.create({
-        model: "claude-3-7-sonnet-20250219",
-        max_tokens: 20000,
-        temperature: 1,
-        system:
-          systemPrompt +
-          "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
-        messages: [{ role: "user", content: prompt }],
-        thinking: {
-          type: "enabled",
-          budget_tokens: 16000,
-        },
-      });
+      // Use Claude with streaming
+      try {
+        rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
+        console.log("API CondMin: Claude streaming completed");
+        console.log(`API CondMin: Raw response length: ${rawResponse.length}`);
 
-      console.log("API CondMin: Claude response received successfully");
-      rawResponse = msg.content[1].text || "{}";
-    }
+        // Extract JSON from the response
+        rawResponse = extractJSON(rawResponse);
 
-    // Additional processing for Claude responses to ensure valid JSON
-    if (llmModel === "claude") {
-      // Try to extract JSON from Claude's response (it might contain markdown code blocks or additional text)
-      console.log("API CondMin: Processing Claude response to extract JSON");
+        // Try to parse the JSON
+        try {
+          generatedContent = JSON.parse(rawResponse);
+          console.log(
+            "API CondMin: Successfully parsed JSON from streaming response"
+          );
+        } catch (parseError) {
+          console.error(
+            "API CondMin: Failed to parse JSON from streaming response:",
+            parseError
+          );
+          console.log(
+            "API CondMin: Attempting to fix JSON with second Claude call"
+          );
 
-      // Check if response is wrapped in a code block
-      const jsonMatch = rawResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (jsonMatch && jsonMatch[1]) {
-        rawResponse = jsonMatch[1].trim();
+          // Make a second call to Claude to fix the JSON
+          const fixedJSON = await callClaudeForJSONValidation(
+            rawResponse,
+            String(parseError),
+            selectedThemes
+          );
+
+          // Extract JSON from the fixed response
+          const cleanedJSON = extractJSON(fixedJSON);
+
+          try {
+            generatedContent = JSON.parse(cleanedJSON);
+            console.log("API CondMin: Successfully parsed fixed JSON");
+          } catch (secondParseError) {
+            console.error(
+              "API CondMin: Failed to parse fixed JSON:",
+              secondParseError
+            );
+            throw new Error(
+              "Unable to generate valid JSON after multiple attempts"
+            );
+          }
+        }
+      } catch (error) {
+        console.error("API CondMin: Error in Claude streaming process:", error);
+        throw error;
       }
+    }
 
-      // Remove any text before or after the JSON object
-      const jsonObjectMatch = rawResponse.match(/\{[\s\S]*\}/);
-      if (jsonObjectMatch) {
-        rawResponse = jsonObjectMatch[0];
+    // If we're using OpenAI or if generatedContent wasn't set above
+    if (!generatedContent && llmModel === "openai") {
+      try {
+        generatedContent = JSON.parse(rawResponse);
+        console.log("API CondMin: Parsed generated content successfully");
+      } catch (parseError) {
+        console.error("API CondMin: Error parsing LLM response:", parseError);
+        console.log("API CondMin: Raw LLM response:", rawResponse);
+        return NextResponse.json(
+          {
+            error:
+              "Failed to parse LLM response. The model did not return valid JSON.",
+            details: String(parseError),
+          },
+          { status: 500 }
+        );
       }
-
-      console.log("API CondMin: Claude response processed");
     }
 
-    try {
-      // Parse the raw JSON response
-      generatedContent = JSON.parse(rawResponse);
-      console.log("API CondMin: Parsed generated content successfully");
-    } catch (parseError) {
-      console.error("API CondMin: Error parsing LLM response:", parseError);
-      console.log("API CondMin: Raw LLM response:", rawResponse);
-      return NextResponse.json(
-        {
-          error:
-            "Failed to parse LLM response. The model did not return valid JSON.",
-          details: String(parseError),
-        },
-        { status: 500 }
-      );
-    }
+    // Validate and fix the content structure
+    generatedContent = validateAndFixContent(
+      generatedContent,
+      selectedThemes,
+      niveau
+    );
 
     // Validate the generated content against our schema
     const contentValidation =
@@ -372,27 +613,11 @@ ${
         JSON.stringify(contentValidation.error)
       );
 
-      // Attempt to fix the content structure
-      console.log("API CondMin: Attempting to fix content structure");
-
-      // Ensure all required fields are present
-      if (!generatedContent.title) {
-        generatedContent.title = `Exercices de Conditions Minimales TAGE MAGE - ${niveau}`;
-      }
-      if (!generatedContent.introduction) {
-        generatedContent.introduction = `Voici une série d'exercices pour vous préparer à la section Conditions Minimales du TAGE MAGE. Pour chaque question, déterminez quelle(s) information(s) est/sont suffisante(s) pour y répondre.`;
-      }
-      if (!generatedContent.conclusion) {
-        generatedContent.conclusion = "Fin des exercices. Bonne préparation !";
-      }
-
-      // Ensure exercises is an array
+      // Check if we have no valid exercises
       if (
         !generatedContent.exercises ||
-        !Array.isArray(generatedContent.exercises)
+        generatedContent.exercises.length === 0
       ) {
-        generatedContent.exercises = [];
-        // If we have no valid exercises, return an error
         return NextResponse.json(
           {
             error:
@@ -403,75 +628,13 @@ ${
         );
       }
 
-      // Revalidate after fixes
-      const revalidation = GeneratedContentSchema.safeParse(generatedContent);
-      if (!revalidation.success) {
-        return NextResponse.json(
-          {
-            error:
-              "La structure du contenu généré reste invalide après corrections.",
-            details: revalidation.error,
-          },
-          { status: 500 }
-        );
-      }
-    }
-
-    // Normalize and clean up the exercises
-    if (
-      generatedContent.exercises &&
-      Array.isArray(generatedContent.exercises)
-    ) {
-      generatedContent.exercises = generatedContent.exercises.map(
-        (exercise: any, _index: number) => {
-          // Ensure question is a string
-          if (typeof exercise.question !== "string") {
-            exercise.question = String(exercise.question || "");
-          }
-
-          // Clean up the question to remove unnecessary mentions
-          exercise.question = exercise.question
-            .replace(/^(variation|inédit|exercice)\s+\d+[:.]\s+/i, "")
-            .replace(/^(variation|inédit|exercice)\s+\d+\s+/i, "");
-
-          // Ensure info1 and info2 are present and are strings
-          if (!exercise.info1) {
-            exercise.info1 = "Information 1 manquante";
-          } else if (typeof exercise.info1 !== "string") {
-            exercise.info1 = String(exercise.info1);
-          }
-
-          if (!exercise.info2) {
-            exercise.info2 = "Information 2 manquante";
-          } else if (typeof exercise.info2 !== "string") {
-            exercise.info2 = String(exercise.info2);
-          }
-
-          // Ensure answer is a string
-          if (!exercise.answer) {
-            exercise.answer = "A"; // Default answer
-          } else if (typeof exercise.answer !== "string") {
-            exercise.answer = String(exercise.answer);
-          }
-
-          // Ensure answer is a valid option (A-E)
-          if (!["A", "B", "C", "D", "E"].includes(exercise.answer)) {
-            exercise.answer = "A";
-          }
-
-          // Ensure theme is present and valid
-          if (!exercise.theme || typeof exercise.theme !== "string") {
-            // Assign a random theme from selected themes
-            exercise.theme =
-              selectedThemes[Math.floor(Math.random() * selectedThemes.length)];
-          } else if (!selectedThemes.includes(exercise.theme)) {
-            // If theme is not in selected themes, reassign
-            exercise.theme =
-              selectedThemes[Math.floor(Math.random() * selectedThemes.length)];
-          }
-
-          return exercise;
-        }
+      return NextResponse.json(
+        {
+          error:
+            "La structure du contenu généré reste invalide après corrections.",
+          details: contentValidation.error,
+        },
+        { status: 500 }
       );
     }
 
