@@ -263,7 +263,7 @@ IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou aprè
   });
 
   console.log("API CondMin: Claude JSON validation response received");
-  return msg.content[1].text || "{}";
+  return msg.content[0].text || "{}";
 }
 
 export async function POST(request: NextRequest) {

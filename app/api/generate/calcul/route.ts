@@ -277,8 +277,8 @@ IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou aprè
     messages: [{ role: "user", content: validationPrompt }],
   });
 
-  console.log("API Calcul: Claude JSON validation response received");
-  return msg.content[1].text || "{}";
+  console.log("API Calcul: Claude JSON validation response received", msg);
+  return msg.content[0].text || "{}";
 }
 
 export async function POST(request: NextRequest) {
