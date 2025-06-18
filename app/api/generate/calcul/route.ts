@@ -348,19 +348,16 @@ export async function POST(request: NextRequest) {
       "API Calcul: Fetching random exercises from database by themes"
     );
 
-    // Build the query based on selected themes
-    let query = supabase.from("questions_calcul").select("*").limit(20);
+    // Use the random_calcul_questions view for random selection
+    let query = supabase.from("random_calcul_questions").select("*").limit(20);
 
-    // Add theme filter if specific themes are selected (not "all")
+    // Add theme filter if specific themes are selected
     if (selectedThemes.length > 0) {
       query = query.in("Thème", selectedThemes);
     }
 
-    // Execute the query
-    const { data: randomExercises, error: fetchError } = await query.order(
-      "Question",
-      { ascending: false }
-    );
+    // Execute the query using the random view
+    const { data: randomExercises, error: fetchError } = await query;
 
     if (fetchError) {
       console.error("API Calcul: Error fetching exercises:", fetchError);
@@ -371,11 +368,17 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(
-      `API Calcul: Successfully fetched ${randomExercises.length} exercises`
+      `API Calcul: Successfully fetched ${
+        randomExercises?.length || 0
+      } exercises`
     );
 
-    // No exercises found with selected themes
-    if (randomExercises.length === 0) {
+    // Add console.log to print the Supabase query result
+    console.log("=== SUPABASE QUERY RESULT ===");
+    console.log("randomExercises:", JSON.stringify(randomExercises, null, 2));
+    console.log("=== END SUPABASE QUERY RESULT ===");
+
+    if (!randomExercises || randomExercises.length === 0) {
       return NextResponse.json(
         {
           error:
@@ -386,7 +389,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare exercise examples for the prompt
-    const exercisesExamples = randomExercises.map((exercise) => ({
+    const exercisesExamples = randomExercises.map((exercise: any) => ({
       question: exercise.Énoncé,
       options: {
         A: exercise.A,
@@ -534,6 +537,11 @@ ${
 }`;
 
     console.log(`API Calcul: Calling ${llmModel} with prompt`);
+
+    // Add console.log to print the final prompt sent to Claude
+    console.log("=== FINAL PROMPT SENT TO CLAUDE ===");
+    console.log(prompt);
+    console.log("=== END FINAL PROMPT ===");
 
     let generatedContent;
     let rawResponse = "";
