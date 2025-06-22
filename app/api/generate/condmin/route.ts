@@ -8,6 +8,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { systemPrompt } from "./prompt-condmin"; // Importation du prompt spécifique
+import { pdf } from "pdf-to-img";
+import path from "path";
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -34,7 +36,7 @@ const GenerateRequestSchema = z.object({
   ]),
   questionCount: z.number().int().min(1).max(100),
   outputFormat: z.enum(["docx"]), // Uniquement DOCX pour l'instant
-  llmModel: z.enum(["openai", "claude"]).default("openai"),
+  llmModel: z.enum(["openai", "claude"]).default("claude"), // Keep parameter but always use claude
   optionsCount: z.number().int().min(2).max(5).default(5),
   selectedThemes: z.array(z.string()).min(1), // At least one theme must be selected
 });
@@ -57,25 +59,45 @@ const GeneratedContentSchema = z.object({
   conclusion: z.string(),
 });
 
+// Theme to PDF page mapping for CondMin
+const THEME_TO_PAGES: Record<string, number[]> = {
+  Pourcentages: [364, 365], // Pourcentages section
+  "Partage du temps de travail": [370, 371], // Partage du temps section
+  "Théorèmes de Thalès et de Pythagore": [382, 383], // Théorèmes section
+  "Centaines, dizaines, unités": [380, 381], // Centaines, dizaines section
+  "Proportionnalité multiple": [376, 377], // Proportionnalité multiple section
+  "Liens de parenté": [378, 379], // Liens de parenté section
+  "Proportionnalité simple": [374, 375], // Proportionnalité simple section
+  Autre: [340, 341, 342, 343, 344, 345], // General methodology pages
+  "Cas de croisement": [368, 369], // Cas de croisement section
+  "Capital et intérêts": [362, 363], // Capital et intérêts section
+  "Cas de rattrapage": [366, 367], // Cas de rattrapage section
+  "Équations et inéquations": [356, 357], // Équations et inéquations section
+  Moyennes: [360, 361], // Moyennes section
+  Probabilités: [384, 385], // Probabilités section
+  Parité: [372, 373], // Parité section
+  "Vitesse, distance et temps": [358, 359], // Vitesse, distance et temps section
+};
+
 // Helper function to extract JSON from text
 function extractJSON(text: string): string {
-  console.log("API CondMin: Attempting to extract JSON from text");
+  console.log("🔍 Extracting JSON from Claude response");
 
   // Check if response is wrapped in a code block
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   if (jsonMatch && jsonMatch[1]) {
-    console.log("API CondMin: Found JSON in code block");
+    console.log("✅ Found JSON in code block");
     return jsonMatch[1].trim();
   }
 
   // Remove any text before or after the JSON object
   const jsonObjectMatch = text.match(/\{[\s\S]*\}/);
   if (jsonObjectMatch) {
-    console.log("API CondMin: Found JSON object in text");
+    console.log("✅ Found JSON object in text");
     return jsonObjectMatch[0];
   }
 
-  console.log("API CondMin: No JSON pattern found, returning original text");
+  console.log("⚠️ No JSON pattern found, returning original text");
   return text;
 }
 
@@ -85,7 +107,7 @@ function validateAndFixContent(
   selectedThemes: string[],
   niveau: string
 ) {
-  console.log("API CondMin: Validating and fixing content structure");
+  console.log("🔧 Validating and fixing content structure");
 
   // Ensure all required fields are present
   if (!content.title) {
@@ -100,13 +122,13 @@ function validateAndFixContent(
 
   // Ensure exercises is an array
   if (!content.exercises || !Array.isArray(content.exercises)) {
-    console.log("API CondMin: No valid exercises array found");
+    console.log("⚠️ No valid exercises array found");
     content.exercises = [];
   }
 
   // Normalize and clean up the exercises
   content.exercises = content.exercises.map((exercise: any, index: number) => {
-    console.log(`API CondMin: Processing exercise ${index + 1}`);
+    console.log(`🔧 Processing exercise ${index + 1}`);
 
     // Ensure question is a string
     if (typeof exercise.question !== "string") {
@@ -165,7 +187,7 @@ async function callClaudeWithStreaming(
   prompt: string,
   systemPrompt: string
 ): Promise<string> {
-  console.log("API CondMin: Starting Claude streaming call");
+  console.log("🤖 Starting Claude streaming call");
 
   let accumulatedResponse = "";
   let thinkingContent = "";
@@ -174,7 +196,7 @@ async function callClaudeWithStreaming(
   try {
     const stream = await anthropic.messages.create({
       model: "claude-3-7-sonnet-20250219",
-      max_tokens: 20000,
+      max_tokens: 64000,
       temperature: 1,
       system:
         systemPrompt +
@@ -187,12 +209,12 @@ async function callClaudeWithStreaming(
       stream: true,
     });
 
-    console.log("API CondMin: Claude stream created, processing chunks");
+    console.log("🤖 Claude stream created, processing chunks");
 
     for await (const chunk of stream as any) {
       if (chunk.type === "content_block_start") {
         console.log(
-          `API CondMin: Content block started - Index: ${chunk.index}, Type: ${chunk.content_block.type}`
+          `🤖 Content block started - Index: ${chunk.index}, Type: ${chunk.content_block.type}`
         );
       } else if (chunk.type === "content_block_delta") {
         if (chunk.index === 0) {
@@ -204,89 +226,525 @@ async function callClaudeWithStreaming(
           accumulatedResponse += chunk.delta.text;
         }
       } else if (chunk.type === "content_block_stop") {
-        console.log(
-          `API CondMin: Content block stopped - Index: ${chunk.index}`
-        );
+        console.log(`🤖 Content block stopped - Index: ${chunk.index}`);
       }
     }
 
-    console.log("API CondMin: Streaming completed");
-    console.log(
-      `API CondMin: Thinking content length: ${thinkingContent.length}`
-    );
-    console.log(`API CondMin: Main content length: ${mainContent.length}`);
+    console.log("✅ Claude streaming completed");
+    console.log(`📝 Main content length: ${mainContent.length}`);
 
     return mainContent;
   } catch (error) {
-    console.error("API CondMin: Error during streaming:", error);
+    console.error("❌ Error during Claude streaming:", error);
     throw error;
   }
 }
 
-// Helper function to call Claude without streaming for JSON validation
-async function callClaudeForJSONValidation(
-  invalidJSON: string,
-  error: string,
+// Helper function to extract PDF pages and convert to text using OpenAI Vision
+async function extractPDFPagesForThemes(
   selectedThemes: string[]
 ): Promise<string> {
-  console.log("API CondMin: Calling Claude for JSON validation");
+  console.log("📄 Starting PDF extraction for themes:", selectedThemes);
 
-  const validationPrompt = `Le JSON suivant est invalide ou mal formaté:
+  try {
+    // Get all unique pages needed for selected themes
+    const allPages = new Set<number>();
+    selectedThemes.forEach((theme) => {
+      const pages = THEME_TO_PAGES[theme];
+      if (pages) {
+        pages.forEach((page) => allPages.add(page));
+        console.log(`📄 Theme "${theme}" requires pages: ${pages.join(", ")}`);
+      } else {
+        console.log(`⚠️ No pages found for theme: ${theme}`);
+      }
+    });
 
-${invalidJSON}
+    const pagesToExtract = Array.from(allPages).sort((a, b) => a - b);
+    console.log(`📄 Total pages to extract: ${pagesToExtract.join(", ")}`);
 
-Erreur rencontrée: ${error}
-
-Corrige ce JSON pour qu'il soit valide et respecte exactement cette structure:
-{
-  "title": "string",
-  "introduction": "string",
-  "exercises": [
-    {
-      "question": "string",
-      "info1": "string",
-      "info2": "string",
-      "answer": "string (A, B, C, D ou E)",
-      "theme": "string (un des thèmes suivants: ${selectedThemes.join(", ")})",
-      "explanation": "string (optionnel)",
-      "shortExplanation": "string (optionnel)"
+    if (pagesToExtract.length === 0) {
+      throw new Error("No pages found for selected themes");
     }
-  ],
-  "conclusion": "string"
+
+    // Path to the PDF file
+    const pdfPath = path.join(
+      process.cwd(),
+      "app",
+      "api",
+      "tage-mage",
+      "manuel.pdf"
+    );
+    console.log(`📄 PDF path: ${pdfPath}`);
+
+    // Convert PDF to images
+    console.log("📄 Converting PDF to images...");
+    const document = await pdf(pdfPath, { scale: 2 });
+    console.log(`📄 PDF loaded with ${document.length} total pages`);
+
+    // Extract the specific pages as images
+    const pageImages: { page: number; base64: string }[] = [];
+
+    for (const pageNum of pagesToExtract) {
+      if (pageNum <= document.length) {
+        console.log(`📄 Extracting page ${pageNum}...`);
+        const pageBuffer = await document.getPage(pageNum);
+        const pageBase64 = pageBuffer.toString("base64");
+        pageImages.push({ page: pageNum, base64: pageBase64 });
+        console.log(
+          `✅ Page ${pageNum} extracted (${pageBase64.length} chars)`
+        );
+      } else {
+        console.log(
+          `⚠️ Page ${pageNum} exceeds PDF length (${document.length})`
+        );
+      }
+    }
+
+    if (pageImages.length === 0) {
+      throw new Error("No valid pages could be extracted");
+    }
+
+    // Send images to OpenAI Vision for text extraction
+    console.log(`🔍 Sending ${pageImages.length} images to OpenAI Vision...`);
+
+    const visionContent = [
+      {
+        type: "text" as const,
+        text: `Please extract all the text from these PDF pages about TAGE MAGE Conditions Minimales exercises. 
+        
+        For each page, provide:
+        1. The page number
+        2. All text content with proper structure
+        3. Any mathematical formulas or equations
+        4. Exercise examples if present
+        5. Methodology and approach explanations
+        
+        Structure the output clearly so an AI can understand the content for generating similar exercises.
+        
+        Pages being analyzed: ${pagesToExtract.join(", ")}`,
+      },
+      ...pageImages.map(({ page, base64 }) => ({
+        type: "image_url" as const,
+        image_url: {
+          url: `data:image/png;base64,${base64}`,
+          detail: "high" as const,
+        },
+      })),
+    ];
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4.1",
+      messages: [
+        {
+          role: "user",
+          content: visionContent,
+        },
+      ],
+      max_tokens: 4000,
+    });
+
+    const extractedText =
+      response.choices[0].message.content || "No text extracted";
+    console.log(`✅ Text extraction completed (${extractedText.length} chars)`);
+    console.log(
+      "📄 First 500 chars of extracted text:",
+      extractedText.substring(0, 500)
+    );
+
+    return extractedText;
+  } catch (error) {
+    console.error("❌ Error in PDF extraction:", error);
+    throw error;
+  }
 }
 
-IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou après.`;
+// Helper function to generate variations using database exercises
+async function generateVariations(
+  variationCount: number,
+  selectedThemes: string[],
+  niveau: string,
+  correctionType: string,
+  supabase: any
+): Promise<any> {
+  if (variationCount === 0) {
+    console.log("⏭️ Skipping variations (count = 0)");
+    return { exercises: [] };
+  }
 
-  const msg: any = await anthropic.messages.create({
-    model: "claude-3-7-sonnet-20250219",
-    max_tokens: 20000,
+  console.log(
+    `🔄 Starting variations generation (${variationCount} exercises)`
+  );
+
+  // Fetch random exercises from database
+  console.log("🔄 Fetching random exercises from database...");
+  let query = supabase
+    .from("questions_condMinimales")
+    .select("*")
+    .limit(variationCount);
+
+  if (selectedThemes.length > 0) {
+    query = query.in("Thème", selectedThemes);
+  }
+
+  const { data: randomExercises, error: fetchError } = await query.order(
+    "Question",
+    { ascending: false }
+  );
+
+  if (fetchError) {
+    console.error("❌ Error fetching exercises:", fetchError);
+    throw new Error("Failed to fetch exercises from database");
+  }
+
+  console.log(
+    `✅ Fetched ${randomExercises?.length || 0} exercises from database`
+  );
+
+  if (!randomExercises || randomExercises.length === 0) {
+    throw new Error("No exercises found for selected themes");
+  }
+
+  // Prepare exercise examples for the prompt
+  const exercisesExamples = randomExercises.map((exercise: any) => ({
+    question: exercise.Énoncé,
+    info1: exercise.Info1,
+    info2: exercise.Info2,
+    answer: exercise.Réponse,
+    theme: exercise.Thème && exercise.Thème !== "EMPTY" ? exercise.Thème : null,
+  }));
+
+  // Create the difficulty distribution text for mixte niveau
+  const mixteDistributionText =
+    niveau === "mixte"
+      ? "selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile"
+      : "";
+
+  // Create themes text for prompt
+  const themesText =
+    selectedThemes.length > 0
+      ? `sur les thèmes suivants : ${selectedThemes.join(", ")}`
+      : "sur tous les thèmes";
+
+  // Prepare correction type for prompt
+  let correctionDescription;
+  switch (correctionType) {
+    case "sansCorrection":
+      correctionDescription = "sans correction";
+      break;
+    case "correctionCourte":
+      correctionDescription = "avec une version corrigée courte";
+      break;
+    case "correctionDetaillee":
+      correctionDescription = "avec une correction détaillée";
+      break;
+  }
+
+  const prompt = `Générer ${variationCount} exercices de variation ${
+    niveau === "mixte"
+      ? "de niveau varié " + mixteDistributionText
+      : `de niveau ${niveau}`
+  } 
+pour le sous-test "Conditions Minimales" ${themesText}. 
+Fournir ces exercices ${correctionDescription}.
+
+Voici ${
+    exercisesExamples.length
+  } exemples d'exercices de Conditions Minimales pour t'inspirer et créer des VARIATIONS:
+${JSON.stringify(exercisesExamples, null, 2)}
+
+IMPORTANT: Tu dois créer des VARIATIONS de ces exercices, c'est-à-dire modifier l'enrobage (contexte, noms, valeurs) tout en conservant la mécanique de résolution identique.
+
+RAPPEL: Le format des exercices de Conditions Minimales est spécifique:
+- Une question principale
+- Deux informations numérotées (1) et (2) 
+- La réponse identifie quelle(s) information(s) est/sont suffisante(s) pour répondre à la question
+
+Pour chaque exercice, inclure :
+1. Une question claire et directe, sans mentions comme "Variation X" ou "Exercice X"
+2. Les deux informations (info1 et info2)
+3. La réponse correcte (lettre A, B, C, D ou E)
+4. Le thème de l'exercice (doit être l'un des thèmes suivants: ${selectedThemes.join(
+    ", "
+  )})
+${
+  correctionType !== "sansCorrection"
+    ? correctionType === "correctionCourte"
+      ? "5. Une courte explication (shortExplanation) qui indique brièvement le raisonnement pour déterminer la suffisance des informations"
+      : "5. Une explication détaillée (explanation) qui analyse en profondeur la suffisance de chaque information"
+    : ""
+}
+
+TRÈS IMPORTANT: Ta réponse DOIT être au format JSON valide et complet, structuré exactement comme spécifié ci-dessous:
+
+{
+  "exercises": [
+    {
+      "question": "Énoncé de la question principale (ex: Le nombre n est-il pair ?)",
+      "info1": "Information 1 (ex: n est un cube.)",
+      "info2": "Information 2 (ex: n + 1 est divisible par 4.)",
+      "answer": "Lettre de la réponse correcte (A, B, C, D ou E)",
+      "theme": "Le thème de l'exercice (parmi les thèmes spécifiés)",
+      ${
+        correctionType !== "sansCorrection"
+          ? correctionType === "correctionCourte"
+            ? `"shortExplanation": "Explication courte"`
+            : `"explanation": "Explication détaillée"`
+          : ""
+      }
+    }
+    // Plus d'exercices...
+  ]
+}`;
+
+  console.log("🔄 Calling Claude for variations generation...");
+  const rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
+
+  // Extract and parse JSON
+  const cleanedResponse = extractJSON(rawResponse);
+  let generatedContent;
+
+  try {
+    generatedContent = JSON.parse(cleanedResponse);
+    console.log(
+      `✅ Variations generated successfully (${
+        generatedContent.exercises?.length || 0
+      } exercises)`
+    );
+  } catch (parseError) {
+    console.error("❌ Failed to parse variations JSON:", parseError);
+    throw new Error("Failed to parse variations response");
+  }
+
+  return generatedContent;
+}
+
+// Helper function to generate inédits using manual PDF content
+async function generateInedits(
+  ineditsCount: number,
+  selectedThemes: string[],
+  niveau: string,
+  correctionType: string
+): Promise<any> {
+  if (ineditsCount === 0) {
+    console.log("⏭️ Skipping inédits (count = 0)");
+    return { exercises: [] };
+  }
+
+  console.log(`✨ Starting inédits generation (${ineditsCount} exercises)`);
+
+  // Determine theme distribution (1 theme per 2 exercises by default)
+  const themesNeeded = Math.ceil(ineditsCount / 2);
+  console.log(`✨ Need ${themesNeeded} themes for ${ineditsCount} inédits`);
+
+  // Randomly select the required number of themes
+  const shuffledThemes = [...selectedThemes].sort(() => Math.random() - 0.5);
+  const selectedThemesForInedits = shuffledThemes.slice(0, themesNeeded);
+
+  console.log(
+    `✨ Selected themes for inédits: ${selectedThemesForInedits.join(", ")}`
+  );
+
+  // Extract PDF content for selected themes only
+  const pdfContent = await extractPDFPagesForThemes(selectedThemesForInedits);
+
+  // Create the difficulty distribution text for mixte niveau
+  const mixteDistributionText =
+    niveau === "mixte"
+      ? "selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile"
+      : "";
+
+  // Prepare correction type for prompt
+  let correctionDescription;
+  switch (correctionType) {
+    case "sansCorrection":
+      correctionDescription = "sans correction";
+      break;
+    case "correctionCourte":
+      correctionDescription = "avec une version corrigée courte";
+      break;
+    case "correctionDetaillee":
+      correctionDescription = "avec une correction détaillée";
+      break;
+  }
+
+  const prompt = `Générer ${ineditsCount} exercices INÉDITS ${
+    niveau === "mixte"
+      ? "de niveau varié " + mixteDistributionText
+      : `de niveau ${niveau}`
+  } 
+pour le sous-test "Conditions Minimales" sur les thèmes suivants : ${selectedThemesForInedits.join(
+    ", "
+  )}. 
+Fournir ces exercices ${correctionDescription}.
+
+IMPORTANT: Tu dois créer des exercices INÉDITS, c'est-à-dire entièrement nouveaux et originaux, en te basant sur le contenu du manuel suivant:
+
+=== CONTENU DU MANUEL TAGE MAGE ===
+${pdfContent}
+=== FIN DU CONTENU DU MANUEL ===
+
+En te basant sur ce contenu, crée des exercices originaux qui respectent:
+1. Les concepts et méthodes expliqués dans le manuel
+2. Le style et format typique des Conditions Minimales du TAGE MAGE
+3. La distribution des thèmes demandée
+
+Répartis les exercices de manière équilibrée sur les thèmes sélectionnés (environ 2 exercices par thème).
+
+RAPPEL: Le format des exercices de Conditions Minimales est spécifique:
+- Une question principale
+- Deux informations numérotées (1) et (2) 
+- La réponse identifie quelle(s) information(s) est/sont suffisante(s) pour répondre à la question
+
+Pour chaque exercice, inclure :
+1. Une question claire et directe, sans mentions comme "Inédit X" ou "Exercice X"
+2. Les deux informations (info1 et info2)
+3. La réponse correcte (lettre A, B, C, D ou E)
+4. Le thème de l'exercice (doit être l'un des thèmes suivants: ${selectedThemesForInedits.join(
+    ", "
+  )})
+${
+  correctionType !== "sansCorrection"
+    ? correctionType === "correctionCourte"
+      ? "5. Une courte explication (shortExplanation) qui indique brièvement le raisonnement pour déterminer la suffisance des informations"
+      : "5. Une explication détaillée (explanation) qui analyse en profondeur la suffisance de chaque information"
+    : ""
+}
+
+TRÈS IMPORTANT: Ta réponse DOIT être au format JSON valide et complet, structuré exactement comme spécifié ci-dessous:
+
+{
+  "exercises": [
+    {
+      "question": "Énoncé de la question principale (ex: Le nombre n est-il pair ?)",
+      "info1": "Information 1 (ex: n est un cube.)",
+      "info2": "Information 2 (ex: n + 1 est divisible par 4.)",
+      "answer": "Lettre de la réponse correcte (A, B, C, D ou E)",
+      "theme": "Le thème de l'exercice (parmi les thèmes spécifiés)",
+      ${
+        correctionType !== "sansCorrection"
+          ? correctionType === "correctionCourte"
+            ? `"shortExplanation": "Explication courte"`
+            : `"explanation": "Explication détaillée"`
+          : ""
+      }
+    }
+    // Plus d'exercices...
+  ]
+}`;
+
+  console.log("✨ Calling Claude for inédits generation...");
+  const rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
+
+  // Extract and parse JSON
+  const cleanedResponse = extractJSON(rawResponse);
+  let generatedContent;
+
+  try {
+    generatedContent = JSON.parse(cleanedResponse);
+    console.log(
+      `✅ Inédits generated successfully (${
+        generatedContent.exercises?.length || 0
+      } exercises)`
+    );
+  } catch (parseError) {
+    console.error("❌ Failed to parse inédits JSON:", parseError);
+    throw new Error("Failed to parse inédits response");
+  }
+
+  return generatedContent;
+}
+
+// Helper function to merge variations and inédits using OpenAI
+async function mergeExercises(
+  variationsResult: any,
+  ineditsResult: any,
+  correctionType: string,
+  selectedThemes: string[]
+): Promise<any> {
+  console.log("🔗 Starting exercises merge with OpenAI");
+
+  const variationsExercises = variationsResult.exercises || [];
+  const ineditsExercises = ineditsResult.exercises || [];
+
+  console.log(
+    `🔗 Merging ${variationsExercises.length} variations + ${ineditsExercises.length} inédits`
+  );
+
+  const mergePrompt = `Tu dois fusionner deux listes d'exercices de Conditions Minimales TAGE MAGE dans un format final structuré.
+
+EXERCICES VARIATIONS:
+${JSON.stringify(variationsExercises, null, 2)}
+
+EXERCICES INÉDITS:
+${JSON.stringify(ineditsExercises, null, 2)}
+
+Fusionne ces exercices dans un document final avec la structure JSON suivante:
+
+{
+  "title": "Exercices de Conditions Minimales TAGE MAGE",
+  "introduction": "Une introduction appropriée pour le document expliquant le principe des Conditions Minimales",
+  "exercises": [
+    // Tous les exercices fusionnés ici, en mélangeant variations et inédits
+  ],
+  "conclusion": "Une conclusion appropriée"
+}
+
+IMPORTANT:
+- Mélange les exercices variations et inédits de manière aléatoire
+- Assure-toi que chaque exercice a les champs: question, info1, info2, answer, theme
+- Vérifie que tous les thèmes sont dans la liste: ${selectedThemes.join(", ")}
+- Ne modifie pas le contenu des exercices, fais juste la fusion et la structuration
+- Retourne uniquement le JSON, sans texte supplémentaire`;
+
+  console.log("🔗 Calling OpenAI for merge...");
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content:
+          "Tu es un assistant qui fusionne des exercices. Retourne uniquement du JSON valide.",
+      },
+      {
+        role: "user",
+        content: mergePrompt,
+      },
+    ],
+    response_format: { type: "json_object" },
     temperature: 0.3,
-    system:
-      "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
-    messages: [{ role: "user", content: validationPrompt }],
-    thinking: {
-      type: "enabled",
-      budget_tokens: 10000,
-    },
   });
 
-  console.log("API CondMin: Claude JSON validation response received");
-  return msg.content[1].text || "{}";
+  const mergedContent = response.choices[0].message.content;
+  console.log(`✅ Merge completed by OpenAI`);
+
+  try {
+    const parsedContent = JSON.parse(mergedContent || "{}");
+    console.log(
+      `✅ Final merged content: ${
+        parsedContent.exercises?.length || 0
+      } total exercises`
+    );
+    return parsedContent;
+  } catch (parseError) {
+    console.error("❌ Failed to parse merged JSON:", parseError);
+    throw new Error("Failed to parse merged response");
+  }
 }
 
 export async function POST(request: NextRequest) {
-  console.log("API CondMin: Generate endpoint called");
+  console.log("🚀 CONDMIN API: Generate endpoint called");
   try {
     // Get and validate request body
-    console.log("API CondMin: Parsing request body");
+    console.log("📥 Parsing request body");
     const body = await request.json();
-    console.log("API CondMin: Request body received:", JSON.stringify(body));
+    console.log("📥 Request body received:", JSON.stringify(body, null, 2));
 
     const validationResult = GenerateRequestSchema.safeParse(body);
 
     if (!validationResult.success) {
       console.error(
-        "API CondMin: Validation error:",
+        "❌ Validation error:",
         JSON.stringify(validationResult.error)
       );
       return NextResponse.json(
@@ -304,300 +762,64 @@ export async function POST(request: NextRequest) {
       correctionType,
       questionCount,
       outputFormat,
-      llmModel,
+      llmModel, // Keep parameter but don't use for logic
       optionsCount,
       selectedThemes,
     } = validationResult.data;
 
-    console.log(
-      "API CondMin: Request validated successfully with parameters:",
-      {
-        userId,
-        sousTest,
-        niveau,
-        variationCount,
-        ineditsCount,
-        correctionType,
-        questionCount,
-        outputFormat,
-        llmModel,
-        optionsCount,
-        selectedThemes,
-      }
-    );
+    console.log("✅ Request validated successfully with parameters:", {
+      userId,
+      sousTest,
+      niveau,
+      variationCount,
+      ineditsCount,
+      correctionType,
+      questionCount,
+      outputFormat,
+      optionsCount,
+      selectedThemes,
+    });
 
-    console.log("API CondMin: Initializing Supabase admin client");
-    // Create Supabase client
+    // Initialize Supabase admin client
+    console.log("🔧 Initializing Supabase admin client");
     const supabase = createAdminClient();
-    console.log("API CondMin: Supabase admin client created successfully");
+    console.log("✅ Supabase admin client created successfully");
 
-    // Retrieve random exercises from the database based on selected themes
-    console.log(
-      "API CondMin: Fetching random exercises from database by themes"
+    console.log("🏁 Starting three-phase generation process:");
+    console.log(`  Phase 1: Generate ${variationCount} variations`);
+    console.log(`  Phase 2: Generate ${ineditsCount} inédits`);
+    console.log(`  Phase 3: Merge results`);
+
+    // Phase 1: Generate Variations
+    console.log("\n=== PHASE 1: VARIATIONS ===");
+    const variationsResult = await generateVariations(
+      variationCount,
+      selectedThemes,
+      niveau,
+      correctionType,
+      supabase
     );
 
-    // Build the query based on selected themes
-    let query = supabase.from("questions_condMinimales").select("*").limit(20);
-
-    // Add theme filter if specific themes are selected
-    if (selectedThemes.length > 0) {
-      query = query.in("Thème", selectedThemes);
-    }
-
-    // Execute the query
-    const { data: randomExercises, error: fetchError } = await query.order(
-      "Question",
-      { ascending: false }
+    // Phase 2: Generate Inédits
+    console.log("\n=== PHASE 2: INÉDITS ===");
+    const ineditsResult = await generateInedits(
+      ineditsCount,
+      selectedThemes,
+      niveau,
+      correctionType
     );
 
-    if (fetchError) {
-      console.error("API CondMin: Error fetching exercises:", fetchError);
-      return NextResponse.json(
-        { error: "Failed to fetch exercises", details: fetchError },
-        { status: 500 }
-      );
-    }
-
-    console.log(
-      `API CondMin: Successfully fetched ${randomExercises.length} exercises`
+    // Phase 3: Merge Results
+    console.log("\n=== PHASE 3: MERGE ===");
+    let generatedContent = await mergeExercises(
+      variationsResult,
+      ineditsResult,
+      correctionType,
+      selectedThemes
     );
 
-    // No exercises found with selected themes
-    if (randomExercises.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Aucun exercice trouvé pour les thèmes sélectionnés. Veuillez sélectionner d'autres thèmes.",
-        },
-        { status: 404 }
-      );
-    }
-
-    // Prépare les exemples d'exercices pour le prompt
-    const exercisesExamples = randomExercises.map((exercise) => ({
-      question: exercise.Énoncé,
-      info1: exercise.Info1,
-      info2: exercise.Info2,
-      answer: exercise.Réponse,
-      theme:
-        exercise.Thème && exercise.Thème !== "EMPTY" ? exercise.Thème : null,
-    }));
-
-    // Prepare distribution text for prompt
-    const distributionText = `avec ${variationCount} variations et ${ineditsCount} inédits`;
-
-    // Prepare correction type for prompt
-    let correctionDescription;
-    switch (correctionType) {
-      case "sansCorrection":
-        correctionDescription = "sans correction";
-        break;
-      case "correctionCourte":
-        correctionDescription = "avec une version corrigée courte";
-        break;
-      case "correctionDetaillee":
-        correctionDescription = "avec une correction détaillée";
-        break;
-    }
-
-    // Map correctionType to document_type for database compatibility
-    let documentType;
-    switch (correctionType) {
-      case "sansCorrection":
-        documentType = "polycopie";
-        break;
-      case "correctionCourte":
-        documentType = "fiche";
-        break;
-      case "correctionDetaillee":
-        documentType = "examen";
-        break;
-    }
-
-    // Determine part_exercice value based on which has more questions
-    const partExercice =
-      variationCount >= ineditsCount ? "variation" : "inedits";
-
-    // For "mixte" niveau, we'll use "moyen" for the database to maintain compatibility
-    const dbNiveau = niveau === "mixte" ? "moyen" : niveau;
-
-    // Create the difficulty distribution text for mixte niveau
-    const mixteDistributionText =
-      niveau === "mixte"
-        ? "selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile"
-        : "";
-
-    // Create themes text for prompt
-    const themesText =
-      selectedThemes.length > 0
-        ? `sur les thèmes suivants : ${selectedThemes.join(", ")}`
-        : "sur tous les thèmes";
-
-    // Note: For CondMin, we always use 5 options regardless of optionsCount
-    // as it has a fixed format with 5 specific options
-
-    // Call LLM to generate exercises
-    const prompt = `Générer ${questionCount} exercices ${
-      niveau === "mixte"
-        ? "de niveau varié " + mixteDistributionText
-        : `de niveau ${niveau}`
-    } pour le sous-test "Conditions Minimales" ${distributionText} ${themesText}. 
-Fournir ces exercices ${correctionDescription}.
-
-Voici ${
-      exercisesExamples.length
-    } exemples d'exercices de Conditions Minimales pour t'inspirer:
-${JSON.stringify(exercisesExamples, null, 2)}
-
-RAPPEL IMPORTANT: Le format des exercices de Conditions Minimales est spécifique:
-- Une question principale
-- Deux informations numérotées (1) et (2) 
-- La réponse identifie quelle(s) information(s) est/sont suffisante(s) pour répondre à la question
-
-Pour chaque exercice, inclure :
-1. Une question claire et directe
-2. Les deux informations (info1 et info2)
-3. La réponse correcte (lettre A, B, C, D ou E)
-4. Le thème de l'exercice (doit être l'un des thèmes suivants: ${selectedThemes.join(
-      ", "
-    )})
-${
-  correctionType !== "sansCorrection"
-    ? correctionType === "correctionCourte"
-      ? "5. Une courte explication (shortExplanation) qui indique brièvement le raisonnement pour déterminer la suffisance des informations"
-      : "5. Une explication détaillée (explanation) qui analyse en profondeur la suffisance de chaque information"
-    : ""
-}
-
-${
-  llmModel === "claude"
-    ? `TRÈS IMPORTANT: Ta réponse DOIT être au format JSON valide et complet, structuré exactement comme spécifié ci-dessous, sans commentaires ni texte supplémentaire avant ou après le JSON. Le JSON doit inclure tous les champs requis et respecter cette structure exacte:`
-    : `Retourner le contenu dans un format JSON structuré avec ces champs :`
-}
-{
-  "title": "Un titre pour le document",
-  "introduction": "Texte d'introduction bref qui explique le principe des Conditions Minimales",
-  "exercises": [
-    {
-      "question": "Énoncé de la question principale (ex: Le nombre n est-il pair ?)",
-      "info1": "Information 1 (ex: n est un cube.)",
-      "info2": "Information 2 (ex: n + 1 est divisible par 4.)",
-      "answer": "Lettre de la réponse correcte (A, B, C, D ou E)",
-      "theme": "Le thème de l'exercice (parmi les thèmes spécifiés)",
-      ${
-        correctionType !== "sansCorrection"
-          ? correctionType === "correctionCourte"
-            ? `"shortExplanation": "Version courte de l'explication"`
-            : `"explanation": "Explication détaillée du raisonnement"`
-          : ""
-      }
-    }
-    // Plus d'exercices...
-  ],
-  "conclusion": "Texte de conclusion bref"
-}
-
-${
-  llmModel === "claude"
-    ? `Assure-toi que le JSON est valide et complet, avec tous les exercices demandés, et que chaque exercice contient tous les champs requis. N'ajoute aucun texte en dehors de l'objet JSON.`
-    : ""
-}`;
-
-    console.log(`API CondMin: Calling ${llmModel} with prompt`);
-
-    let generatedContent;
-    let rawResponse = "";
-
-    if (llmModel === "openai") {
-      // Use OpenAI
-      const completion = await openai.chat.completions.create({
-        model: "o3-mini",
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          { role: "user", content: prompt },
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      console.log("API CondMin: OpenAI response received successfully");
-      rawResponse = completion.choices[0].message.content || "{}";
-    } else {
-      // Use Claude with streaming
-      try {
-        rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
-        console.log("API CondMin: Claude streaming completed");
-        console.log(`API CondMin: Raw response length: ${rawResponse.length}`);
-
-        // Extract JSON from the response
-        rawResponse = extractJSON(rawResponse);
-
-        // Try to parse the JSON
-        try {
-          generatedContent = JSON.parse(rawResponse);
-          console.log(
-            "API CondMin: Successfully parsed JSON from streaming response"
-          );
-        } catch (parseError) {
-          console.error(
-            "API CondMin: Failed to parse JSON from streaming response:",
-            parseError
-          );
-          console.log(
-            "API CondMin: Attempting to fix JSON with second Claude call"
-          );
-
-          // Make a second call to Claude to fix the JSON
-          const fixedJSON = await callClaudeForJSONValidation(
-            rawResponse,
-            String(parseError),
-            selectedThemes
-          );
-
-          // Extract JSON from the fixed response
-          const cleanedJSON = extractJSON(fixedJSON);
-
-          try {
-            generatedContent = JSON.parse(cleanedJSON);
-            console.log("API CondMin: Successfully parsed fixed JSON");
-          } catch (secondParseError) {
-            console.error(
-              "API CondMin: Failed to parse fixed JSON:",
-              secondParseError
-            );
-            throw new Error(
-              "Unable to generate valid JSON after multiple attempts"
-            );
-          }
-        }
-      } catch (error) {
-        console.error("API CondMin: Error in Claude streaming process:", error);
-        throw error;
-      }
-    }
-
-    // If we're using OpenAI or if generatedContent wasn't set above
-    if (!generatedContent && llmModel === "openai") {
-      try {
-        generatedContent = JSON.parse(rawResponse);
-        console.log("API CondMin: Parsed generated content successfully");
-      } catch (parseError) {
-        console.error("API CondMin: Error parsing LLM response:", parseError);
-        console.log("API CondMin: Raw LLM response:", rawResponse);
-        return NextResponse.json(
-          {
-            error:
-              "Failed to parse LLM response. The model did not return valid JSON.",
-            details: String(parseError),
-          },
-          { status: 500 }
-        );
-      }
-    }
-
-    // Validate and fix the content structure
+    // Validate and fix the final content structure
+    console.log("🔧 Final validation and cleanup");
     generatedContent = validateAndFixContent(
       generatedContent,
       selectedThemes,
@@ -609,7 +831,7 @@ ${
       GeneratedContentSchema.safeParse(generatedContent);
     if (!contentValidation.success) {
       console.error(
-        "API CondMin: Generated content validation error:",
+        "❌ Generated content validation error:",
         JSON.stringify(contentValidation.error)
       );
 
@@ -639,71 +861,59 @@ ${
     }
 
     // Generate DOCX document
-    console.log("API CondMin: Generating DOCX document");
+    console.log("📄 Generating DOCX document");
     const docxEndpoint = `${request.nextUrl.origin}/api/generate/condmin/docx`;
-    console.log("API CondMin: Calling DOCX endpoint:", docxEndpoint);
+    console.log("📄 Calling DOCX endpoint:", docxEndpoint);
 
     const docxPayload = {
       userId,
       content: generatedContent,
       title: `${sousTest}_${niveau}_${questionCount}_questions`,
       correctionType,
-      randomExercises,
+      randomExercises: [], // Empty since we're using new generation method
       optionsCount,
-      selectedThemes, // Pass selected themes to DOCX generator
+      selectedThemes,
     };
-    console.log("API CondMin: DOCX request payload prepared");
 
     const response = await fetch(docxEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // Pass through authentication headers from the original request
         ...(request.headers.get("authorization") && {
           authorization: request.headers.get("authorization")!,
         }),
         ...(request.headers.get("cookie") && {
           cookie: request.headers.get("cookie")!,
         }),
-        // Add any other auth headers your app uses
       },
       body: JSON.stringify(docxPayload),
     });
 
-    console.log(
-      "API CondMin: DOCX generation response status:",
-      response.status
-    );
+    console.log("📄 DOCX generation response status:", response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        "API CondMin: Failed to generate DOCX. Response:",
-        errorText
-      );
+      console.error("❌ Failed to generate DOCX. Response:", errorText);
       throw new Error(`Failed to generate DOCX: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log("API CondMin: DOCX generated successfully:", result);
+    console.log("✅ DOCX generated successfully:", result);
     const documentUrl = result.url;
     const fileId = result.id;
 
-    // Save to generations table using the original schema structure
-    console.log("API CondMin: Saving generation to database:", {
-      user_id: userId,
-      sous_test: sousTest,
-      niveau: dbNiveau,
-      part_exercice: partExercice,
-      document_type: documentType,
-      question_count: questionCount,
-      output_format: outputFormat,
-      file_path: documentUrl,
-      llm_model: llmModel,
-      options_count: optionsCount,
-      selected_themes: selectedThemes,
-    });
+    // Save to generations table
+    const dbNiveau = niveau === "mixte" ? "moyen" : niveau;
+    const documentType =
+      correctionType === "sansCorrection"
+        ? "polycopie"
+        : correctionType === "correctionCourte"
+        ? "fiche"
+        : "examen";
+    const partExercice =
+      variationCount >= ineditsCount ? "variation" : "inedits";
 
+    console.log("💾 Saving generation to database");
     const { data, error } = await supabase
       .from("generations")
       .insert({
@@ -715,30 +925,30 @@ ${
         question_count: questionCount,
         output_format: outputFormat,
         file_path: documentUrl,
-        llm_model: llmModel,
+        llm_model: "claude", // Always claude now
         options_count: optionsCount,
-        selected_themes: selectedThemes, // Add selected themes to the database
+        selected_themes: selectedThemes,
       })
       .select();
 
     if (error) {
-      console.error("API CondMin: Error saving generation:", error);
+      console.error("❌ Error saving generation:", error);
       return NextResponse.json(
         { error: "Failed to save generation", details: error },
         { status: 500 }
       );
     }
 
-    console.log("API CondMin: Generation saved successfully:", data);
+    console.log("✅ Generation saved successfully:", data);
+    console.log("🎉 Request completed successfully");
 
-    console.log("API CondMin: Request completed successfully");
     return NextResponse.json({
       success: true,
       url: documentUrl,
       fileId,
     });
   } catch (error) {
-    console.error("API CondMin: Generation error:", error);
+    console.error("❌ Generation error:", error);
     return NextResponse.json(
       {
         error: "Internal Server Error",

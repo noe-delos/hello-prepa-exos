@@ -8,6 +8,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { systemPrompt } from "./prompt-calcul"; // Import the calcul-specific prompt
+import { pdf } from "pdf-to-img";
+import path from "path";
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -34,7 +36,7 @@ const GenerateRequestSchema = z.object({
   ]),
   questionCount: z.number().int().min(1).max(100),
   outputFormat: z.enum(["docx"]), // DOCX only for now
-  llmModel: z.enum(["openai", "claude"]).default("openai"),
+  llmModel: z.enum(["openai", "claude"]).default("claude"), // Keep parameter but always use claude
   optionsCount: z.number().int().min(2).max(5).default(5),
   selectedThemes: z.array(z.string()).min(1), // At least one theme must be selected
 });
@@ -57,25 +59,49 @@ const GeneratedContentSchema = z.object({
   conclusion: z.string(),
 });
 
+// Theme to PDF page mapping
+const THEME_TO_PAGES: Record<string, number[]> = {
+  Probabilité: [184, 185, 186, 187, 188, 189], // Probabilités sections
+  "Proportionnalité simple et multiple": [136, 137, 138, 139], // Both proportionnalité sections
+  Géométrie: [172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183], // All geometry sections
+  "Carrés / Cubes / Identités remarquables": [118, 119], // Carrés, cubes section
+  "Partage du temps de travail": [156, 157], // Partage du temps section
+  "Nombres premiers / PPCM / PGCD": [118, 119, 124, 125], // Carrés/cubes + PPCM/PGCD sections
+  "Calcul mental": [108, 109, 110, 111], // Both calcul mental sections
+  "Nombre de rencontres et Nombre de salutations": [192, 193], // Rencontres section
+  "Base 10, 100 et 1000": [200, 201, 204, 205], // Les bases + Base 100/1000 sections
+  Tableaux: [164, 165], // Using conversion tables as closest match
+  Combinaisons: [190, 191], // Combinaisons section
+  "Suites arithmétiques / Suites géométriques": [166, 167, 168, 169], // Both suites sections
+  "Puissances, pourcentages et ratios": [130, 131, 132, 133], // Puissances + Pourcentages sections
+  "Équations / Systèmes d'équations": [148, 149, 150, 151], // Both equations sections
+  "Unités et conversion": [164, 165], // Conversion tables section
+  "Cas de croisement et cas de rattrapage": [158, 159, 160, 161, 162, 163], // All croisement/rattrapage sections
+  "Vitesse, Distance, Temps (VDT)": [154, 155], // VDT section
+  Intérêts: [134, 135], // Intérêts section
+  "Les arbres": [198, 199], // Les arbres section
+  Barycentre: [142, 143], // Barycentre section
+};
+
 // Helper function to extract JSON from text
 function extractJSON(text: string): string {
-  console.log("API Calcul: Attempting to extract JSON from text");
+  console.log("🔍 Extracting JSON from Claude response");
 
   // Check if response is wrapped in a code block
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   if (jsonMatch && jsonMatch[1]) {
-    console.log("API Calcul: Found JSON in code block");
+    console.log("✅ Found JSON in code block");
     return jsonMatch[1].trim();
   }
 
   // Remove any text before or after the JSON object
   const jsonObjectMatch = text.match(/\{[\s\S]*\}/);
   if (jsonObjectMatch) {
-    console.log("API Calcul: Found JSON object in text");
+    console.log("✅ Found JSON object in text");
     return jsonObjectMatch[0];
   }
 
-  console.log("API Calcul: No JSON pattern found, returning original text");
+  console.log("⚠️ No JSON pattern found, returning original text");
   return text;
 }
 
@@ -85,7 +111,7 @@ function validateAndFixContent(
   optionLetters: string[],
   selectedThemes: string[]
 ) {
-  console.log("API Calcul: Validating and fixing content structure");
+  console.log("🔧 Validating and fixing content structure");
 
   // Ensure all required fields are present
   if (!content.title) {
@@ -100,13 +126,13 @@ function validateAndFixContent(
 
   // Ensure exercises is an array
   if (!content.exercises || !Array.isArray(content.exercises)) {
-    console.log("API Calcul: No valid exercises array found");
+    console.log("⚠️ No valid exercises array found");
     content.exercises = [];
   }
 
   // Normalize and clean up the exercises
   content.exercises = content.exercises.map((exercise: any, index: number) => {
-    console.log(`API Calcul: Processing exercise ${index + 1}`);
+    console.log(`🔧 Processing exercise ${index + 1}`);
 
     // Ensure question is a string
     if (typeof exercise.question !== "string") {
@@ -176,7 +202,7 @@ async function callClaudeWithStreaming(
   prompt: string,
   systemPrompt: string
 ): Promise<string> {
-  console.log("API Calcul: Starting Claude streaming call");
+  console.log("🤖 Starting Claude streaming call");
 
   let accumulatedResponse = "";
   let thinkingContent = "";
@@ -198,12 +224,12 @@ async function callClaudeWithStreaming(
       stream: true,
     });
 
-    console.log("API Calcul: Claude stream created, processing chunks");
+    console.log("🤖 Claude stream created, processing chunks");
 
     for await (const chunk of stream as any) {
       if (chunk.type === "content_block_start") {
         console.log(
-          `API Calcul: Content block started - Index: ${chunk.index}, Type: ${chunk.content_block.type}`
+          `🤖 Content block started - Index: ${chunk.index}, Type: ${chunk.content_block.type}`
         );
       } else if (chunk.type === "content_block_delta") {
         if (chunk.index === 0) {
@@ -215,273 +241,251 @@ async function callClaudeWithStreaming(
           accumulatedResponse += chunk.delta.text;
         }
       } else if (chunk.type === "content_block_stop") {
-        console.log(
-          `API Calcul: Content block stopped - Index: ${chunk.index}`
-        );
+        console.log(`🤖 Content block stopped - Index: ${chunk.index}`);
       }
     }
 
-    console.log("API Calcul: Streaming completed");
-    console.log(`API Calcul: Thinking content length: ${thinkingContent}`);
-    console.log(`API Calcul: Main content length: ${mainContent}`);
+    console.log("✅ Claude streaming completed");
+    console.log(`📝 Main content length: ${mainContent.length}`);
 
     return mainContent;
   } catch (error) {
-    console.error("API Calcul: Error during streaming:", error);
+    console.error("❌ Error during Claude streaming:", error);
     throw error;
   }
 }
 
-// Helper function to call Claude without streaming for JSON validation
-async function callClaudeForJSONValidation(
-  invalidJSON: string,
-  error: string,
-  optionsCount: number,
+// Helper function to extract PDF pages and convert to text using OpenAI Vision
+async function extractPDFPagesForThemes(
   selectedThemes: string[]
 ): Promise<string> {
-  console.log("API Calcul: Calling Claude for JSON validation");
+  console.log("📄 Starting PDF extraction for themes:", selectedThemes);
 
-  const validationPrompt = `Le JSON suivant est invalide ou mal formaté:
-
-${invalidJSON}
-
-Erreur rencontrée: ${error}
-
-Corrige ce JSON pour qu'il soit valide et respecte exactement cette structure:
-{
-  "title": "string",
-  "introduction": "string",
-  "exercises": [
-    {
-      "question": "string",
-      "options": {
-        ${Array.from(
-          { length: optionsCount },
-          (_, i) => `"${String.fromCharCode(65 + i)}": "string"`
-        ).join(",\n        ")}
-      },
-      "answer": "string (une des lettres des options)",
-      "theme": "string (un des thèmes suivants: ${selectedThemes.join(", ")})",
-      "explanation": "string (optionnel)",
-      "shortExplanation": "string (optionnel)",
-      "image": "string (optionnel)"
-    }
-  ],
-  "conclusion": "string"
-}
-
-IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou après.`;
-
-  const msg: any = await anthropic.messages.create({
-    model: "claude-3-7-sonnet-20250219",
-    max_tokens: 64000,
-    temperature: 0.3,
-    system:
-      "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
-    messages: [{ role: "user", content: validationPrompt }],
-    thinking: {
-      type: "enabled",
-      budget_tokens: 10000,
-    },
-  });
-
-  console.log("API Calcul: Claude JSON validation response received");
-  return msg.content[1].text || "{}";
-}
-
-export async function POST(request: NextRequest) {
-  console.log("API Calcul: Generate endpoint called");
   try {
-    // Get and validate request body
-    console.log("API Calcul: Parsing request body");
-    const body = await request.json();
-    console.log("API Calcul: Request body received:", JSON.stringify(body));
-
-    const validationResult = GenerateRequestSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      console.error(
-        "API Calcul: Validation error:",
-        JSON.stringify(validationResult.error)
-      );
-      return NextResponse.json(
-        { error: validationResult.error },
-        { status: 400 }
-      );
-    }
-
-    const {
-      userId,
-      sousTest,
-      niveau,
-      variationCount,
-      ineditsCount,
-      correctionType,
-      questionCount,
-      outputFormat,
-      llmModel,
-      optionsCount,
-      selectedThemes,
-    } = validationResult.data;
-
-    console.log("API Calcul: Request validated successfully with parameters:", {
-      userId,
-      sousTest,
-      niveau,
-      variationCount,
-      ineditsCount,
-      correctionType,
-      questionCount,
-      outputFormat,
-      llmModel,
-      optionsCount,
-      selectedThemes,
+    // Get all unique pages needed for selected themes
+    const allPages = new Set<number>();
+    selectedThemes.forEach((theme) => {
+      const pages = THEME_TO_PAGES[theme];
+      if (pages) {
+        pages.forEach((page) => allPages.add(page));
+        console.log(`📄 Theme "${theme}" requires pages: ${pages.join(", ")}`);
+      } else {
+        console.log(`⚠️ No pages found for theme: ${theme}`);
+      }
     });
 
-    console.log("API Calcul: Initializing Supabase admin client");
-    // Create Supabase client
-    const supabase = createAdminClient();
-    console.log("API Calcul: Supabase admin client created successfully");
+    const pagesToExtract = Array.from(allPages).sort((a, b) => a - b);
+    console.log(`📄 Total pages to extract: ${pagesToExtract.join(", ")}`);
 
-    // Retrieve random exercises from the database based on selected themes
-    console.log(
-      "API Calcul: Fetching random exercises from database by themes"
+    if (pagesToExtract.length === 0) {
+      throw new Error("No pages found for selected themes");
+    }
+
+    // Path to the PDF file
+    const pdfPath = path.join(
+      process.cwd(),
+      "app",
+      "api",
+      "tage-mage",
+      "manuel.pdf"
     );
+    console.log(`📄 PDF path: ${pdfPath}`);
 
-    // Use the random_calcul_questions view for random selection
-    let query = supabase.from("random_calcul_questions").select("*").limit(20);
+    // Convert PDF to images
+    console.log("📄 Converting PDF to images...");
+    const document = await pdf(pdfPath, { scale: 2 });
+    console.log(`📄 PDF loaded with ${document.length} total pages`);
 
-    // Add theme filter if specific themes are selected
-    if (selectedThemes.length > 0) {
-      query = query.in("Thème", selectedThemes);
+    // Extract the specific pages as images
+    const pageImages: { page: number; base64: string }[] = [];
+
+    for (const pageNum of pagesToExtract) {
+      if (pageNum <= document.length) {
+        console.log(`📄 Extracting page ${pageNum}...`);
+        const pageBuffer = await document.getPage(pageNum);
+        const pageBase64 = pageBuffer.toString("base64");
+        pageImages.push({ page: pageNum, base64: pageBase64 });
+        console.log(
+          `✅ Page ${pageNum} extracted (${pageBase64.length} chars)`
+        );
+      } else {
+        console.log(
+          `⚠️ Page ${pageNum} exceeds PDF length (${document.length})`
+        );
+      }
     }
 
-    // Execute the query using the random view
-    const { data: randomExercises, error: fetchError } = await query;
-
-    if (fetchError) {
-      console.error("API Calcul: Error fetching exercises:", fetchError);
-      return NextResponse.json(
-        { error: "Failed to fetch exercises", details: fetchError },
-        { status: 500 }
-      );
+    if (pageImages.length === 0) {
+      throw new Error("No valid pages could be extracted");
     }
 
-    console.log(
-      `API Calcul: Successfully fetched ${
-        randomExercises?.length || 0
-      } exercises`
-    );
+    // Send images to OpenAI Vision for text extraction
+    console.log(`🔍 Sending ${pageImages.length} images to OpenAI Vision...`);
 
-    // Add console.log to print the Supabase query result
-    console.log("=== SUPABASE QUERY RESULT ===");
-    console.log("randomExercises:", JSON.stringify(randomExercises, null, 2));
-    console.log("=== END SUPABASE QUERY RESULT ===");
-
-    if (!randomExercises || randomExercises.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Aucun exercice trouvé pour les thèmes sélectionnés. Veuillez sélectionner d'autres thèmes.",
-        },
-        { status: 404 }
-      );
-    }
-
-    // Prepare exercise examples for the prompt
-    const exercisesExamples = randomExercises.map((exercise: any) => ({
-      question: exercise.Énoncé,
-      options: {
-        A: exercise.A,
-        B: exercise.B,
-        C: exercise.C,
-        D: exercise.D,
-        E: exercise.E,
+    const visionContent = [
+      {
+        type: "text" as const,
+        text: `Please extract all the text from these PDF pages about TAGE MAGE calcul exercises. 
+        
+        For each page, provide:
+        1. The page number
+        2. All text content with proper structure
+        3. Any mathematical formulas or equations
+        4. Exercise examples if present
+        
+        Structure the output clearly so an AI can understand the content for generating similar exercises.
+        
+        Pages being analyzed: ${pagesToExtract.join(", ")}`,
       },
-      answer: exercise.Réponse,
-      image: exercise.Image === "TRUE" ? "{INSÉRER IMAGE}" : null,
-      theme:
-        exercise.Thème && exercise.Thème !== "EMPTY" ? exercise.Thème : null,
-    }));
+      ...pageImages.map(({ page, base64 }) => ({
+        type: "image_url" as const,
+        image_url: {
+          url: `data:image/png;base64,${base64}`,
+          detail: "high" as const,
+        },
+      })),
+    ];
 
-    // Prepare distribution text for prompt
-    const distributionText = `avec ${variationCount} variations et ${ineditsCount} inédits`;
+    const response = await openai.chat.completions.create({
+      model: "gpt-4.1",
+      messages: [
+        {
+          role: "user",
+          content: visionContent,
+        },
+      ],
+      max_tokens: 4000,
+    });
 
-    // Prepare correction type for prompt
-    let correctionDescription;
-    switch (correctionType) {
-      case "sansCorrection":
-        correctionDescription = "sans correction";
-        break;
-      case "correctionCourte":
-        correctionDescription = "avec une version corrigée courte";
-        break;
-      case "correctionDetaillee":
-        correctionDescription = "avec une correction détaillée";
-        break;
-    }
+    const extractedText =
+      response.choices[0].message.content || "No text extracted";
+    console.log(`✅ Text extraction completed (${extractedText.length} chars)`);
+    console.log(
+      "📄 First 500 chars of extracted text:",
+      extractedText.substring(0, 500)
+    );
 
-    // Map correctionType to document_type for database compatibility
-    let documentType;
-    switch (correctionType) {
-      case "sansCorrection":
-        documentType = "polycopie";
-        break;
-      case "correctionCourte":
-        documentType = "fiche";
-        break;
-      case "correctionDetaillee":
-        documentType = "examen";
-        break;
-    }
+    return extractedText;
+  } catch (error) {
+    console.error("❌ Error in PDF extraction:", error);
+    throw error;
+  }
+}
 
-    // Determine part_exercice value based on which has more questions
-    const partExercice =
-      variationCount >= ineditsCount ? "variation" : "inedits";
+// Helper function to generate variations using database exercises
+async function generateVariations(
+  variationCount: number,
+  selectedThemes: string[],
+  niveau: string,
+  correctionType: string,
+  optionsCount: number,
+  supabase: any
+): Promise<any> {
+  if (variationCount === 0) {
+    console.log("⏭️ Skipping variations (count = 0)");
+    return { exercises: [] };
+  }
 
-    // For "mixte" niveau, we'll use "moyen" for the database to maintain compatibility
-    const dbNiveau = niveau === "mixte" ? "moyen" : niveau;
+  console.log(
+    `🔄 Starting variations generation (${variationCount} exercises)`
+  );
 
-    // Prepare the options text based on optionsCount
-    const optionsText =
-      optionsCount === 2
-        ? "(A, B)"
-        : optionsCount === 3
-        ? "(A, B, C)"
-        : optionsCount === 4
-        ? "(A, B, C, D)"
-        : "(A, B, C, D, E)";
+  // Fetch random exercises from database
+  console.log("🔄 Fetching random exercises from database...");
+  let query = supabase
+    .from("random_calcul_questions")
+    .select("*")
+    .limit(variationCount);
 
-    // Convert optionsCount to actual option letters
-    const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
-      String.fromCharCode(65 + i)
-    ); // A=65, B=66, etc.
+  if (selectedThemes.length > 0) {
+    query = query.in("Thème", selectedThemes);
+  }
 
-    // Create the difficulty distribution text for mixte niveau
-    const mixteDistributionText =
-      niveau === "mixte"
-        ? "selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile"
-        : "";
+  const { data: randomExercises, error: fetchError } = await query;
 
-    // Create themes text for prompt
-    const themesText =
-      selectedThemes.length > 0
-        ? `sur les thèmes suivants : ${selectedThemes.join(", ")}`
-        : "sur tous les thèmes";
+  if (fetchError) {
+    console.error("❌ Error fetching exercises:", fetchError);
+    throw new Error("Failed to fetch exercises from database");
+  }
 
-    // Call LLM to generate exercises
-    const prompt = `Générer ${questionCount} exercices ${
-      niveau === "mixte"
-        ? "de niveau varié " + mixteDistributionText
-        : `de niveau ${niveau}`
-    } 
-pour le sous-test "calcul" ${distributionText} ${themesText}. 
+  console.log(
+    `✅ Fetched ${randomExercises?.length || 0} exercises from database`
+  );
+
+  if (!randomExercises || randomExercises.length === 0) {
+    throw new Error("No exercises found for selected themes");
+  }
+
+  // Prepare exercise examples for the prompt
+  const exercisesExamples = randomExercises.map((exercise: any) => ({
+    question: exercise.Énoncé,
+    options: {
+      A: exercise.A,
+      B: exercise.B,
+      C: exercise.C,
+      D: exercise.D,
+      E: exercise.E,
+    },
+    answer: exercise.Réponse,
+    image: exercise.Image === "TRUE" ? "{INSÉRER IMAGE}" : null,
+    theme: exercise.Thème && exercise.Thème !== "EMPTY" ? exercise.Thème : null,
+  }));
+
+  // Prepare the options text based on optionsCount
+  const optionsText =
+    optionsCount === 2
+      ? "(A, B)"
+      : optionsCount === 3
+      ? "(A, B, C)"
+      : optionsCount === 4
+      ? "(A, B, C, D)"
+      : "(A, B, C, D, E)";
+
+  // Convert optionsCount to actual option letters
+  const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+    String.fromCharCode(65 + i)
+  );
+
+  // Create the difficulty distribution text for mixte niveau
+  const mixteDistributionText =
+    niveau === "mixte"
+      ? "selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile"
+      : "";
+
+  // Create themes text for prompt
+  const themesText =
+    selectedThemes.length > 0
+      ? `sur les thèmes suivants : ${selectedThemes.join(", ")}`
+      : "sur tous les thèmes";
+
+  // Prepare correction type for prompt
+  let correctionDescription;
+  switch (correctionType) {
+    case "sansCorrection":
+      correctionDescription = "sans correction";
+      break;
+    case "correctionCourte":
+      correctionDescription = "avec une version corrigée courte";
+      break;
+    case "correctionDetaillee":
+      correctionDescription = "avec une correction détaillée";
+      break;
+  }
+
+  const prompt = `Générer ${variationCount} exercices de variation ${
+    niveau === "mixte"
+      ? "de niveau varié " + mixteDistributionText
+      : `de niveau ${niveau}`
+  } 
+pour le sous-test "calcul" ${themesText}. 
 Fournir ces exercices ${correctionDescription}.
 
 Voici ${
-      exercisesExamples.length
-    } exemples d'exercices du type calcul pour t'inspirer:
+    exercisesExamples.length
+  } exemples d'exercices du type calcul pour t'inspirer et créer des VARIATIONS:
 ${JSON.stringify(exercisesExamples, null, 2)}
+
+IMPORTANT: Tu dois créer des VARIATIONS de ces exercices, c'est-à-dire modifier l'enrobage (contexte, noms, valeurs) tout en conservant la mécanique de résolution identique.
 
 Pour chaque exercice, inclure :
 1. Une question claire sous forme de texte. 
@@ -489,8 +493,8 @@ Pour chaque exercice, inclure :
 2. Des options à choix multiples ${optionsText} - IMPORTANT: Fournir exactement ${optionsCount} options
 3. La réponse correcte (lettre ${optionLetters.join(", ")})
 4. Le thème de l'exercice (doit être l'un des thèmes suivants: ${selectedThemes.join(
-      ", "
-    )})
+    ", "
+  )})
 ${
   correctionType !== "sansCorrection"
     ? correctionType === "correctionCourte"
@@ -499,14 +503,9 @@ ${
     : ""
 }
 
-${
-  llmModel === "claude"
-    ? `TRÈS IMPORTANT: Ta réponse DOIT être au format JSON valide et complet, structuré exactement comme spécifié ci-dessous, sans commentaires ni texte supplémentaire avant ou après le JSON. Le JSON doit inclure tous les champs requis et respecter cette structure exacte:`
-    : `Retourner le contenu dans un format JSON structuré avec ces champs :`
-}
+TRÈS IMPORTANT: Ta réponse DOIT être au format JSON valide et complet, structuré exactement comme spécifié ci-dessous:
+
 {
-  "title": "Un titre pour le document",
-  "introduction": "Texte d'introduction bref",
   "exercises": [
     {
       "question": "Énoncé de la question 1",
@@ -526,117 +525,364 @@ ${
       }
     }
     // Plus d'exercices...
-  ],
-  "conclusion": "Texte de conclusion bref"
-}
-
-${
-  llmModel === "claude"
-    ? `Assure-toi que le JSON est valide et complet, avec tous les exercices demandés, et que chaque exercice contient tous les champs requis. N'ajoute aucun texte en dehors de l'objet JSON.`
-    : ""
+  ]
 }`;
 
-    console.log(`API Calcul: Calling ${llmModel} with prompt`);
+  console.log("🔄 Calling Claude for variations generation...");
+  const rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
 
-    // Add console.log to print the final prompt sent to Claude
-    console.log("=== FINAL PROMPT SENT TO CLAUDE ===");
-    console.log(prompt);
-    console.log("=== END FINAL PROMPT ===");
+  // Extract and parse JSON
+  const cleanedResponse = extractJSON(rawResponse);
+  let generatedContent;
 
-    let generatedContent;
-    let rawResponse = "";
+  try {
+    generatedContent = JSON.parse(cleanedResponse);
+    console.log(
+      `✅ Variations generated successfully (${
+        generatedContent.exercises?.length || 0
+      } exercises)`
+    );
+  } catch (parseError) {
+    console.error("❌ Failed to parse variations JSON:", parseError);
+    throw new Error("Failed to parse variations response");
+  }
 
-    if (llmModel === "openai") {
-      // Use OpenAI
-      const completion = await openai.chat.completions.create({
-        model: "o3-mini",
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          { role: "user", content: prompt },
-        ],
-        response_format: { type: "json_object" },
-      });
+  return generatedContent;
+}
 
-      console.log("API Calcul: OpenAI response received successfully");
-      rawResponse = completion.choices[0].message.content || "{}";
-    } else {
-      // Use Claude with streaming
-      try {
-        rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
-        console.log("API Calcul: Claude streaming completed");
-        console.log(`API Calcul: Raw response length: ${rawResponse.length}`);
+// Helper function to generate inédits using manual PDF content
+async function generateInedits(
+  ineditsCount: number,
+  selectedThemes: string[],
+  niveau: string,
+  correctionType: string,
+  optionsCount: number
+): Promise<any> {
+  if (ineditsCount === 0) {
+    console.log("⏭️ Skipping inédits (count = 0)");
+    return { exercises: [] };
+  }
 
-        // Extract JSON from the response
-        rawResponse = extractJSON(rawResponse);
+  console.log(`✨ Starting inédits generation (${ineditsCount} exercises)`);
 
-        // Try to parse the JSON
-        try {
-          generatedContent = JSON.parse(rawResponse);
-          console.log(
-            "API Calcul: Successfully parsed JSON from streaming response"
-          );
-        } catch (parseError) {
-          console.error(
-            "API Calcul: Failed to parse JSON from streaming response:",
-            parseError
-          );
-          console.log(
-            "API Calcul: Attempting to fix JSON with second Claude call"
-          );
+  // Determine theme distribution (1 theme per 2 exercises by default)
+  const themesNeeded = Math.ceil(ineditsCount / 2);
+  console.log(`✨ Need ${themesNeeded} themes for ${ineditsCount} inédits`);
 
-          // Make a second call to Claude to fix the JSON
-          const fixedJSON = await callClaudeForJSONValidation(
-            rawResponse,
-            String(parseError),
-            optionsCount,
-            selectedThemes
-          );
+  // Randomly select the required number of themes
+  const shuffledThemes = [...selectedThemes].sort(() => Math.random() - 0.5);
+  const selectedThemesForInedits = shuffledThemes.slice(0, themesNeeded);
 
-          // Extract JSON from the fixed response
-          const cleanedJSON = extractJSON(fixedJSON);
+  console.log(
+    `✨ Selected themes for inédits: ${selectedThemesForInedits.join(", ")}`
+  );
 
-          try {
-            generatedContent = JSON.parse(cleanedJSON);
-            console.log("API Calcul: Successfully parsed fixed JSON");
-          } catch (secondParseError) {
-            console.error(
-              "API Calcul: Failed to parse fixed JSON:",
-              secondParseError
-            );
-            throw new Error(
-              "Unable to generate valid JSON after multiple attempts"
-            );
-          }
-        }
-      } catch (error) {
-        console.error("API Calcul: Error in Claude streaming process:", error);
-        throw error;
+  // Extract PDF content for selected themes only
+  const pdfContent = await extractPDFPagesForThemes(selectedThemesForInedits);
+
+  // Prepare the options text based on optionsCount
+  const optionsText =
+    optionsCount === 2
+      ? "(A, B)"
+      : optionsCount === 3
+      ? "(A, B, C)"
+      : optionsCount === 4
+      ? "(A, B, C, D)"
+      : "(A, B, C, D, E)";
+
+  // Convert optionsCount to actual option letters
+  const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+    String.fromCharCode(65 + i)
+  );
+
+  // Create the difficulty distribution text for mixte niveau
+  const mixteDistributionText =
+    niveau === "mixte"
+      ? "selon la distribution suivante : 20% facile, 30% moyen, 30% difficile, 20% très difficile"
+      : "";
+
+  // Prepare correction type for prompt
+  let correctionDescription;
+  switch (correctionType) {
+    case "sansCorrection":
+      correctionDescription = "sans correction";
+      break;
+    case "correctionCourte":
+      correctionDescription = "avec une version corrigée courte";
+      break;
+    case "correctionDetaillee":
+      correctionDescription = "avec une correction détaillée";
+      break;
+  }
+
+  const prompt = `Générer ${ineditsCount} exercices INÉDITS ${
+    niveau === "mixte"
+      ? "de niveau varié " + mixteDistributionText
+      : `de niveau ${niveau}`
+  } 
+pour le sous-test "calcul" sur les thèmes suivants : ${selectedThemesForInedits.join(
+    ", "
+  )}. 
+Fournir ces exercices ${correctionDescription}.
+
+IMPORTANT: Tu dois créer des exercices INÉDITS, c'est-à-dire entièrement nouveaux et originaux, en te basant sur le contenu du manuel suivant:
+
+=== CONTENU DU MANUEL TAGE MAGE ===
+${pdfContent}
+=== FIN DU CONTENU DU MANUEL ===
+
+En te basant sur ce contenu, crée des exercices originaux qui respectent:
+1. Les concepts et méthodes expliqués dans le manuel
+2. Le style et format typique du TAGE MAGE
+3. La distribution des thèmes demandée
+
+Répartis les exercices de manière équilibrée sur les thèmes sélectionnés (environ 2 exercices par thème).
+
+Pour chaque exercice, inclure :
+1. Une question claire sous forme de texte. 
+   IMPORTANT: La question doit être directe et concise, sans mentions comme "Inédit X" ou "Exercice X".
+2. Des options à choix multiples ${optionsText} - IMPORTANT: Fournir exactement ${optionsCount} options
+3. La réponse correcte (lettre ${optionLetters.join(", ")})
+4. Le thème de l'exercice (doit être l'un des thèmes suivants: ${selectedThemesForInedits.join(
+    ", "
+  )})
+${
+  correctionType !== "sansCorrection"
+    ? correctionType === "correctionCourte"
+      ? "5. Une courte explication (shortExplanation) qui indique brièvement la méthode de résolution"
+      : "5. Une explication un peu plus détaillée (explanation) qui donne la solution complète pas à pas mais pas trop longue non plus"
+    : ""
+}
+
+TRÈS IMPORTANT: Ta réponse DOIT être au format JSON valide et complet, structuré exactement comme spécifié ci-dessous:
+
+{
+  "exercises": [
+    {
+      "question": "Énoncé de la question 1",
+      "options": {
+        ${optionLetters
+          .map((letter) => `"${letter}": "Option ${letter}"`)
+          .join(",\n        ")}
+      },
+      "answer": "Lettre de la réponse correcte",
+      "theme": "Le thème de l'exercice (parmi les thèmes spécifiés)",
+      ${
+        correctionType !== "sansCorrection"
+          ? correctionType === "correctionCourte"
+            ? `"shortExplanation": "Explication courte"`
+            : `"explanation": "Explication détaillée"`
+          : ""
       }
     }
+    // Plus d'exercices...
+  ]
+}`;
 
-    // If we're using OpenAI or if generatedContent wasn't set above
-    if (!generatedContent && llmModel === "openai") {
-      try {
-        generatedContent = JSON.parse(rawResponse);
-        console.log("API Calcul: Parsed generated content successfully");
-      } catch (parseError) {
-        console.error("API Calcul: Error parsing LLM response:", parseError);
-        console.log("API Calcul: Raw LLM response:", rawResponse);
-        return NextResponse.json(
-          {
-            error:
-              "Failed to parse LLM response. The model did not return valid JSON.",
-            details: String(parseError),
-          },
-          { status: 500 }
-        );
-      }
+  console.log("✨ Calling Claude for inédits generation...");
+  const rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
+
+  // Extract and parse JSON
+  const cleanedResponse = extractJSON(rawResponse);
+  let generatedContent;
+
+  try {
+    generatedContent = JSON.parse(cleanedResponse);
+    console.log(
+      `✅ Inédits generated successfully (${
+        generatedContent.exercises?.length || 0
+      } exercises)`
+    );
+  } catch (parseError) {
+    console.error("❌ Failed to parse inédits JSON:", parseError);
+    throw new Error("Failed to parse inédits response");
+  }
+
+  return generatedContent;
+}
+
+// Helper function to merge variations and inédits using OpenAI
+async function mergeExercises(
+  variationsResult: any,
+  ineditsResult: any,
+  correctionType: string,
+  optionsCount: number,
+  selectedThemes: string[]
+): Promise<any> {
+  console.log("🔗 Starting exercises merge with OpenAI");
+
+  const variationsExercises = variationsResult.exercises || [];
+  const ineditsExercises = ineditsResult.exercises || [];
+
+  console.log(
+    `🔗 Merging ${variationsExercises.length} variations + ${ineditsExercises.length} inédits`
+  );
+
+  // Convert optionsCount to actual option letters
+  const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+    String.fromCharCode(65 + i)
+  );
+
+  const mergePrompt = `Tu dois fusionner deux listes d'exercices de calcul TAGE MAGE dans un format final structuré.
+
+EXERCICES VARIATIONS:
+${JSON.stringify(variationsExercises, null, 2)}
+
+EXERCICES INÉDITS:
+${JSON.stringify(ineditsExercises, null, 2)}
+
+Fusionne ces exercices dans un document final avec la structure JSON suivante:
+
+{
+  "title": "Exercices de Calcul TAGE MAGE",
+  "introduction": "Une introduction appropriée pour le document",
+  "exercises": [
+    // Tous les exercices fusionnés ici, en mélangeant variations et inédits
+  ],
+  "conclusion": "Une conclusion appropriée"
+}
+
+IMPORTANT:
+- Mélange les exercices variations et inédits de manière aléatoire
+- Assure-toi que chaque exercice a exactement ${optionsCount} options (${optionLetters.join(
+    ", "
+  )})
+- Vérifie que tous les thèmes sont dans la liste: ${selectedThemes.join(", ")}
+- Ne modifie pas le contenu des exercices, fais juste la fusion et la structuration
+- Retourne uniquement le JSON, sans texte supplémentaire`;
+
+  console.log("🔗 Calling OpenAI for merge...");
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content:
+          "Tu es un assistant qui fusionne des exercices. Retourne uniquement du JSON valide.",
+      },
+      {
+        role: "user",
+        content: mergePrompt,
+      },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.3,
+  });
+
+  const mergedContent = response.choices[0].message.content;
+  console.log(`✅ Merge completed by OpenAI`);
+
+  try {
+    const parsedContent = JSON.parse(mergedContent || "{}");
+    console.log(
+      `✅ Final merged content: ${
+        parsedContent.exercises?.length || 0
+      } total exercises`
+    );
+    return parsedContent;
+  } catch (parseError) {
+    console.error("❌ Failed to parse merged JSON:", parseError);
+    throw new Error("Failed to parse merged response");
+  }
+}
+
+export async function POST(request: NextRequest) {
+  console.log("🚀 CALCUL API: Generate endpoint called");
+  try {
+    // Get and validate request body
+    console.log("📥 Parsing request body");
+    const body = await request.json();
+    console.log("📥 Request body received:", JSON.stringify(body, null, 2));
+
+    const validationResult = GenerateRequestSchema.safeParse(body);
+
+    if (!validationResult.success) {
+      console.error(
+        "❌ Validation error:",
+        JSON.stringify(validationResult.error)
+      );
+      return NextResponse.json(
+        { error: validationResult.error },
+        { status: 400 }
+      );
     }
 
-    // Validate and fix the content structure
+    const {
+      userId,
+      sousTest,
+      niveau,
+      variationCount,
+      ineditsCount,
+      correctionType,
+      questionCount,
+      outputFormat,
+      llmModel, // Keep parameter but don't use for logic
+      optionsCount,
+      selectedThemes,
+    } = validationResult.data;
+
+    console.log("✅ Request validated successfully with parameters:", {
+      userId,
+      sousTest,
+      niveau,
+      variationCount,
+      ineditsCount,
+      correctionType,
+      questionCount,
+      outputFormat,
+      optionsCount,
+      selectedThemes,
+    });
+
+    // Initialize Supabase admin client
+    console.log("🔧 Initializing Supabase admin client");
+    const supabase = createAdminClient();
+    console.log("✅ Supabase admin client created successfully");
+
+    // Convert optionsCount to actual option letters
+    const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+      String.fromCharCode(65 + i)
+    );
+
+    console.log("🏁 Starting three-phase generation process:");
+    console.log(`  Phase 1: Generate ${variationCount} variations`);
+    console.log(`  Phase 2: Generate ${ineditsCount} inédits`);
+    console.log(`  Phase 3: Merge results`);
+
+    // Phase 1: Generate Variations
+    console.log("\n=== PHASE 1: VARIATIONS ===");
+    const variationsResult = await generateVariations(
+      variationCount,
+      selectedThemes,
+      niveau,
+      correctionType,
+      optionsCount,
+      supabase
+    );
+
+    // Phase 2: Generate Inédits
+    console.log("\n=== PHASE 2: INÉDITS ===");
+    const ineditsResult = await generateInedits(
+      ineditsCount,
+      selectedThemes,
+      niveau,
+      correctionType,
+      optionsCount
+    );
+
+    // Phase 3: Merge Results
+    console.log("\n=== PHASE 3: MERGE ===");
+    let generatedContent = await mergeExercises(
+      variationsResult,
+      ineditsResult,
+      correctionType,
+      optionsCount,
+      selectedThemes
+    );
+
+    // Validate and fix the final content structure
+    console.log("🔧 Final validation and cleanup");
     generatedContent = validateAndFixContent(
       generatedContent,
       optionLetters,
@@ -648,7 +894,7 @@ ${
       GeneratedContentSchema.safeParse(generatedContent);
     if (!contentValidation.success) {
       console.error(
-        "API Calcul: Generated content validation error:",
+        "❌ Generated content validation error:",
         JSON.stringify(contentValidation.error)
       );
 
@@ -678,70 +924,59 @@ ${
     }
 
     // Generate DOCX document
-    console.log("API Calcul: Generating DOCX document");
+    console.log("📄 Generating DOCX document");
     const docxEndpoint = `${request.nextUrl.origin}/api/generate/docx`;
-    console.log("API Calcul: Calling DOCX endpoint:", docxEndpoint);
+    console.log("📄 Calling DOCX endpoint:", docxEndpoint);
 
     const docxPayload = {
       userId,
       content: generatedContent,
       title: `${sousTest}_${niveau}_${questionCount}_questions`,
       correctionType,
-      randomExercises,
+      randomExercises: [], // Empty since we're using new generation method
       optionsCount,
-      selectedThemes, // Pass the selected themes to the DOCX generator
+      selectedThemes,
     };
-    console.log("API Calcul: DOCX request payload prepared");
 
     const response = await fetch(docxEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // Pass through authentication headers from the original request
         ...(request.headers.get("authorization") && {
           authorization: request.headers.get("authorization")!,
         }),
         ...(request.headers.get("cookie") && {
           cookie: request.headers.get("cookie")!,
         }),
-        // Add any other auth headers your app uses
       },
       body: JSON.stringify(docxPayload),
     });
-    console.log(
-      "API Calcul: DOCX generation response status:",
-      response.status
-    );
+
+    console.log("📄 DOCX generation response status:", response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        "API Calcul: Failed to generate DOCX. Response:",
-        errorText
-      );
+      console.error("❌ Failed to generate DOCX. Response:", errorText);
       throw new Error(`Failed to generate DOCX: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log("API Calcul: DOCX generated successfully:", result);
+    console.log("✅ DOCX generated successfully:", result);
     const documentUrl = result.url;
     const fileId = result.id;
 
-    // Save to generations table using the original schema structure
-    console.log("API Calcul: Saving generation to database:", {
-      user_id: userId,
-      sous_test: sousTest,
-      niveau: dbNiveau,
-      part_exercice: partExercice,
-      document_type: documentType,
-      question_count: questionCount,
-      output_format: outputFormat,
-      file_path: documentUrl,
-      llm_model: llmModel,
-      options_count: optionsCount,
-      selected_themes: selectedThemes, // Add selected themes to the database
-    });
+    // Save to generations table
+    const dbNiveau = niveau === "mixte" ? "moyen" : niveau;
+    const documentType =
+      correctionType === "sansCorrection"
+        ? "polycopie"
+        : correctionType === "correctionCourte"
+        ? "fiche"
+        : "examen";
+    const partExercice =
+      variationCount >= ineditsCount ? "variation" : "inedits";
 
+    console.log("💾 Saving generation to database");
     const { data, error } = await supabase
       .from("generations")
       .insert({
@@ -753,30 +988,30 @@ ${
         question_count: questionCount,
         output_format: outputFormat,
         file_path: documentUrl,
-        llm_model: llmModel,
+        llm_model: "claude", // Always claude now
         options_count: optionsCount,
-        selected_themes: selectedThemes, // New field in the database
+        selected_themes: selectedThemes,
       })
       .select();
 
     if (error) {
-      console.error("API Calcul: Error saving generation:", error);
+      console.error("❌ Error saving generation:", error);
       return NextResponse.json(
         { error: "Failed to save generation", details: error },
         { status: 500 }
       );
     }
 
-    console.log("API Calcul: Generation saved successfully:", data);
+    console.log("✅ Generation saved successfully:", data);
+    console.log("🎉 Request completed successfully");
 
-    console.log("API Calcul: Request completed successfully");
     return NextResponse.json({
       success: true,
       url: documentUrl,
       fileId,
     });
   } catch (error) {
-    console.error("API Calcul: Generation error:", error);
+    console.error("❌ Generation error:", error);
     return NextResponse.json(
       {
         error: "Internal Server Error",
