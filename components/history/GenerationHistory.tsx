@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react/no-unescaped-entities */
 
@@ -397,7 +398,11 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
                 // For non-collapsed view and latest generation, render with ShinyButton
                 if (!isCollapsed && isLatestGeneration) {
                   return (
-                    <motion.div key={gen.id} variants={itemVariants} layout>
+                    <motion.div
+                      key={gen.id}
+                      variants={itemVariants as any}
+                      layout
+                    >
                       <ShinyButton
                         className={cn(
                           "w-full justify-start p-2 h-auto",
@@ -429,7 +434,11 @@ export function GenerationHistory({ user }: GenerationHistoryProps) {
 
                 // Default button for all other cases
                 return (
-                  <motion.div key={gen.id} variants={itemVariants} layout>
+                  <motion.div
+                    key={gen.id}
+                    variants={itemVariants as any}
+                    layout
+                  >
                     <Button
                       variant="ghost"
                       className={cn(
