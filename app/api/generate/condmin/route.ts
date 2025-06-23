@@ -7,9 +7,9 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { systemPrompt } from "./prompt-condmin"; // Importation du prompt spécifique
-import { pdf } from "pdf-to-img";
+import { systemPrompt } from "./prompt-condmin"; // Import the condmin-specific prompt
 import path from "path";
+import fs from "fs";
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -278,6 +278,7 @@ async function extractPDFPagesForThemes(
 
     // Convert PDF to images
     console.log("📄 Converting PDF to images...");
+    const { pdf } = await import("pdf-to-img");
     const document = await pdf(pdfPath, { scale: 2 });
     console.log(`📄 PDF loaded with ${document.length} total pages`);
 

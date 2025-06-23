@@ -8,8 +8,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { systemPrompt } from "./prompt-calcul"; // Import the calcul-specific prompt
-import { pdf } from "pdf-to-img";
 import path from "path";
+import fs from "fs";
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -291,8 +291,9 @@ async function extractPDFPagesForThemes(
     );
     console.log(`📄 PDF path: ${pdfPath}`);
 
-    // Convert PDF to images
+    // Dynamic import to handle Vercel serverless environment
     console.log("📄 Converting PDF to images...");
+    const { pdf } = await import("pdf-to-img");
     const document = await pdf(pdfPath, { scale: 2 });
     console.log(`📄 PDF loaded with ${document.length} total pages`);
 
