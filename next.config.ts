@@ -12,6 +12,13 @@ const nextConfig = {
       bodySizeLimit: "100mb",
     },
   },
+  webpack: (config, { nextRuntime }) => {
+    // Disable canvas only for Node.js runtime (server-side)
+    if (nextRuntime === "nodejs") {
+      config.resolve.alias.canvas = false;
+    }
+    return config;
+  },
 };
 
 module.exports = nextConfig;
