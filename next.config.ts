@@ -1,7 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["pdfkit", "docx", "pdf-parse", "pdf-to-img"],
+  serverExternalPackages: [
+    "pdfkit",
+    "docx",
+    "pdf-parse",
+    "pdf-to-img",
+    "pdfjs-dist",
+  ],
   experimental: {
     serverActions: {
       bodySizeLimit: "100mb",
