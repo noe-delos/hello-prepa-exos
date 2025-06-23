@@ -16,14 +16,7 @@ const nextConfig = {
   webpack: (config: any, { isServer }: { isServer: boolean }) => {
     if (isServer) {
       // Handle pdfjs-dist worker for serverless environment
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        canvas: false,
-      };
-
-      // Ignore problematic modules in server builds
       config.externals.push({
-        canvas: "canvas",
         "pdfjs-dist/build/pdf.worker.js": "pdfjs-dist/build/pdf.worker.js",
       });
     }
