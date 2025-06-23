@@ -34,7 +34,7 @@ export function FileViewerPanel() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, closeFile]);
 
-  // Add or remove a class to the main content when panel is opened/closed
+  // Add or remove a class to the main content when panel is
   useEffect(() => {
     const mainContent = document.getElementById("main-content");
     if (mainContent) {
