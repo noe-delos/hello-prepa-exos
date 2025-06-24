@@ -8,8 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { systemPrompt } from "./prompt-condmin"; // Import the condmin-specific prompt
-import path from "path";
-import fs from "fs";
+import { tageMageCalcul } from "./tage-mage-condmin"; // Import the chapter data
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -59,24 +58,24 @@ const GeneratedContentSchema = z.object({
   conclusion: z.string(),
 });
 
-// Theme to PDF page mapping for CondMin
-const THEME_TO_PAGES: Record<string, number[]> = {
-  Pourcentages: [364, 365], // Pourcentages section
-  "Partage du temps de travail": [370, 371], // Partage du temps section
-  "Théorèmes de Thalès et de Pythagore": [382, 383], // Théorèmes section
-  "Centaines, dizaines, unités": [380, 381], // Centaines, dizaines section
-  "Proportionnalité multiple": [376, 377], // Proportionnalité multiple section
-  "Liens de parenté": [378, 379], // Liens de parenté section
-  "Proportionnalité simple": [374, 375], // Proportionnalité simple section
-  Autre: [340, 341, 342, 343, 344, 345], // General methodology pages
-  "Cas de croisement": [368, 369], // Cas de croisement section
-  "Capital et intérêts": [362, 363], // Capital et intérêts section
-  "Cas de rattrapage": [366, 367], // Cas de rattrapage section
-  "Équations et inéquations": [356, 357], // Équations et inéquations section
-  Moyennes: [360, 361], // Moyennes section
-  Probabilités: [384, 385], // Probabilités section
-  Parité: [372, 373], // Parité section
-  "Vitesse, distance et temps": [358, 359], // Vitesse, distance et temps section
+// Theme to TypeScript variable mapping for CondMin
+const THEME_TO_VARIABLES: Record<string, string[]> = {
+  Pourcentages: ["pourcentages"],
+  "Partage du temps de travail": ["partageTempsTravail"],
+  "Théorèmes de Thalès et de Pythagore": ["theoremesThalPythagore"],
+  "Centaines, dizaines, unités": ["centainesDizainesUnites"],
+  "Proportionnalité multiple": ["proportionnaliteMultiple"],
+  "Liens de parenté": ["liensDeParente"],
+  "Proportionnalité simple": ["proportionnaliteSimple"],
+  Autre: ["methodesDeResolution", "presentationSousTest"],
+  "Cas de croisement": ["casDeCroisement"],
+  "Capital et intérêts": ["capitalEtInterets"],
+  "Cas de rattrapage": ["casDeRattrapage"],
+  "Équations et inéquations": ["equationsInequations"],
+  Moyennes: ["moyennes"],
+  Probabilités: ["probabilites"],
+  Parité: ["parite"],
+  "Vitesse, distance et temps": ["vitesseDistanceTemps"],
 };
 
 // Helper function to extract JSON from text
@@ -240,121 +239,65 @@ async function callClaudeWithStreaming(
   }
 }
 
-// Helper function to extract PDF pages and convert to text using OpenAI Vision
-async function extractPDFPagesForThemes(
+// Helper function to extract chapter content from TypeScript variables
+async function extractChapterContentForThemes(
   selectedThemes: string[]
 ): Promise<string> {
-  console.log("📄 Starting PDF extraction for themes:", selectedThemes);
+  console.log(
+    "📄 Starting chapter content extraction for themes:",
+    selectedThemes
+  );
 
   try {
-    // Get all unique pages needed for selected themes
-    const allPages = new Set<number>();
+    // Get all unique variables needed for selected themes
+    const allVariables = new Set<string>();
     selectedThemes.forEach((theme) => {
-      const pages = THEME_TO_PAGES[theme];
-      if (pages) {
-        pages.forEach((page) => allPages.add(page));
-        console.log(`📄 Theme "${theme}" requires pages: ${pages.join(", ")}`);
+      const variables = THEME_TO_VARIABLES[theme];
+      if (variables) {
+        variables.forEach((variable) => allVariables.add(variable));
+        console.log(
+          `📄 Theme "${theme}" requires variables: ${variables.join(", ")}`
+        );
       } else {
-        console.log(`⚠️ No pages found for theme: ${theme}`);
+        console.log(`⚠️ No variables found for theme: ${theme}`);
       }
     });
 
-    const pagesToExtract = Array.from(allPages).sort((a, b) => a - b);
-    console.log(`📄 Total pages to extract: ${pagesToExtract.join(", ")}`);
-
-    if (pagesToExtract.length === 0) {
-      throw new Error("No pages found for selected themes");
-    }
-
-    // Path to the PDF file
-    const pdfPath = path.join(
-      process.cwd(),
-      "app",
-      "api",
-      "tage-mage",
-      "manuel.pdf"
-    );
-    console.log(`📄 PDF path: ${pdfPath}`);
-
-    // Convert PDF to images
-    console.log("📄 Converting PDF to images...");
-    const { pdf } = await import("pdf-to-img");
-    const document = await pdf(pdfPath, { scale: 2 });
-    console.log(`📄 PDF loaded with ${document.length} total pages`);
-
-    // Extract the specific pages as images
-    const pageImages: { page: number; base64: string }[] = [];
-
-    for (const pageNum of pagesToExtract) {
-      if (pageNum <= document.length) {
-        console.log(`📄 Extracting page ${pageNum}...`);
-        const pageBuffer = await document.getPage(pageNum);
-        const pageBase64 = pageBuffer.toString("base64");
-        pageImages.push({ page: pageNum, base64: pageBase64 });
-        console.log(
-          `✅ Page ${pageNum} extracted (${pageBase64.length} chars)`
-        );
-      } else {
-        console.log(
-          `⚠️ Page ${pageNum} exceeds PDF length (${document.length})`
-        );
-      }
-    }
-
-    if (pageImages.length === 0) {
-      throw new Error("No valid pages could be extracted");
-    }
-
-    // Send images to OpenAI Vision for text extraction
-    console.log(`🔍 Sending ${pageImages.length} images to OpenAI Vision...`);
-
-    const visionContent = [
-      {
-        type: "text" as const,
-        text: `Please extract all the text from these PDF pages about TAGE MAGE Conditions Minimales exercises. 
-        
-        For each page, provide:
-        1. The page number
-        2. All text content with proper structure
-        3. Any mathematical formulas or equations
-        4. Exercise examples if present
-        5. Methodology and approach explanations
-        
-        Structure the output clearly so an AI can understand the content for generating similar exercises.
-        
-        Pages being analyzed: ${pagesToExtract.join(", ")}`,
-      },
-      ...pageImages.map(({ page, base64 }) => ({
-        type: "image_url" as const,
-        image_url: {
-          url: `data:image/png;base64,${base64}`,
-          detail: "high" as const,
-        },
-      })),
-    ];
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4.1",
-      messages: [
-        {
-          role: "user",
-          content: visionContent,
-        },
-      ],
-      max_tokens: 4000,
-    });
-
-    const extractedText =
-      response.choices[0].message.content || "No text extracted";
-    console.log(`✅ Text extraction completed (${extractedText.length} chars)`);
+    const variablesToExtract = Array.from(allVariables);
     console.log(
-      "📄 First 500 chars of extracted text:",
-      extractedText.substring(0, 500)
+      `📄 Total variables to extract: ${variablesToExtract.join(", ")}`
     );
 
-    return extractedText;
+    if (variablesToExtract.length === 0) {
+      throw new Error("No variables found for selected themes");
+    }
+
+    // Extract content from each variable
+    let extractedContent = "";
+    variablesToExtract.forEach((variableName) => {
+      const content =
+        tageMageCalcul[variableName as keyof typeof tageMageCalcul];
+      if (content) {
+        extractedContent += `\n=== ${variableName.toUpperCase()} ===\n${content}\n`;
+        console.log(
+          `✅ Variable ${variableName} extracted (${content.length} chars)`
+        );
+      } else {
+        console.log(`⚠️ Variable ${variableName} not found in tageMageCalcul`);
+      }
+    });
+
+    console.log(
+      `✅ Chapter content extraction completed (${extractedContent.length} chars)`
+    );
+    console.log(
+      "📄 First 500 chars of extracted content:",
+      extractedContent.substring(0, 500)
+    );
+
+    return extractedContent;
   } catch (error) {
-    console.error("❌ Error in PDF extraction:", error);
+    console.error("❌ Error in chapter content extraction:", error);
     throw error;
   }
 }
@@ -546,7 +489,9 @@ async function generateInedits(
   );
 
   // Extract PDF content for selected themes only
-  const pdfContent = await extractPDFPagesForThemes(selectedThemesForInedits);
+  const pdfContent = await extractChapterContentForThemes(
+    selectedThemesForInedits
+  );
 
   // Create the difficulty distribution text for mixte niveau
   const mixteDistributionText =

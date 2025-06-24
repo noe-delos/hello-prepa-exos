@@ -8,8 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { systemPrompt } from "./prompt-calcul"; // Import the calcul-specific prompt
-import path from "path";
-import fs from "fs";
+import { tageAmageCalcul } from "./tage-amage-calcul"; // Import the chapter data
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -59,28 +58,41 @@ const GeneratedContentSchema = z.object({
   conclusion: z.string(),
 });
 
-// Theme to PDF page mapping
-const THEME_TO_PAGES: Record<string, number[]> = {
-  Probabilité: [184, 185, 186, 187, 188, 189], // Probabilités sections
-  "Proportionnalité simple et multiple": [136, 137, 138, 139], // Both proportionnalité sections
-  Géométrie: [172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183], // All geometry sections
-  "Carrés / Cubes / Identités remarquables": [118, 119], // Carrés, cubes section
-  "Partage du temps de travail": [156, 157], // Partage du temps section
-  "Nombres premiers / PPCM / PGCD": [118, 119, 124, 125], // Carrés/cubes + PPCM/PGCD sections
-  "Calcul mental": [108, 109, 110, 111], // Both calcul mental sections
-  "Nombre de rencontres et Nombre de salutations": [192, 193], // Rencontres section
-  "Base 10, 100 et 1000": [200, 201, 204, 205], // Les bases + Base 100/1000 sections
-  Tableaux: [164, 165], // Using conversion tables as closest match
-  Combinaisons: [190, 191], // Combinaisons section
-  "Suites arithmétiques / Suites géométriques": [166, 167, 168, 169], // Both suites sections
-  "Puissances, pourcentages et ratios": [130, 131, 132, 133], // Puissances + Pourcentages sections
-  "Équations / Systèmes d'équations": [148, 149, 150, 151], // Both equations sections
-  "Unités et conversion": [164, 165], // Conversion tables section
-  "Cas de croisement et cas de rattrapage": [158, 159, 160, 161, 162, 163], // All croisement/rattrapage sections
-  "Vitesse, Distance, Temps (VDT)": [154, 155], // VDT section
-  Intérêts: [134, 135], // Intérêts section
-  "Les arbres": [198, 199], // Les arbres section
-  Barycentre: [142, 143], // Barycentre section
+// Theme to TypeScript variable mapping
+const THEME_TO_VARIABLES: Record<string, string[]> = {
+  Probabilité: ["combinaisonsArrangementsAnagrammes"],
+  "Proportionnalité simple et multiple": ["fractions"],
+  Géométrie: [
+    "geometrieAstucesGeometriques",
+    "geometrieCercleSphereArc",
+    "geometrieQuadrilateres",
+    "geometrieTriangles",
+    "theoremePythagore",
+    "theoremeThalès",
+  ],
+  "Carrés / Cubes / Identités remarquables": ["carresCubesNombresPremiers"],
+  "Partage du temps de travail": ["moyennes"],
+  "Nombres premiers / PPCM / PGCD": ["carresCubesNombresPremiers"],
+  "Calcul mental": ["calculMental1", "calculMental2", "astucesCalcul"],
+  "Nombre de rencontres et Nombre de salutations": [
+    "combinaisonsArrangementsAnagrammes",
+  ],
+  "Base 10, 100 et 1000": ["base100ou1000", "bases"],
+  Tableaux: ["moyennes"],
+  Combinaisons: ["combinaisonsArrangementsAnagrammes"],
+  "Suites arithmétiques / Suites géométriques": ["questionsRares"],
+  "Puissances, pourcentages et ratios": ["astucesPremierDernierChiffre"],
+  "Équations / Systèmes d'équations": ["inconnuesEntieres"],
+  "Unités et conversion": ["contenanceConcentrationFluxDebit"],
+  "Cas de croisement et cas de rattrapage": [
+    "casCroisementDepartDiffere",
+    "casCroisementDepartSimultane",
+    "casRattrapage",
+  ],
+  "Vitesse, Distance, Temps (VDT)": ["casRattrapage"],
+  Intérêts: ["interetsSimpleComposes"],
+  "Les arbres": ["arbres"],
+  Barycentre: ["barycentre"],
 };
 
 // Helper function to extract JSON from text
@@ -255,120 +267,65 @@ async function callClaudeWithStreaming(
   }
 }
 
-// Helper function to extract PDF pages and convert to text using OpenAI Vision
-async function extractPDFPagesForThemes(
+// Helper function to extract chapter content from TypeScript variables
+async function extractChapterContentForThemes(
   selectedThemes: string[]
 ): Promise<string> {
-  console.log("📄 Starting PDF extraction for themes:", selectedThemes);
+  console.log(
+    "📄 Starting chapter content extraction for themes:",
+    selectedThemes
+  );
 
   try {
-    // Get all unique pages needed for selected themes
-    const allPages = new Set<number>();
+    // Get all unique variables needed for selected themes
+    const allVariables = new Set<string>();
     selectedThemes.forEach((theme) => {
-      const pages = THEME_TO_PAGES[theme];
-      if (pages) {
-        pages.forEach((page) => allPages.add(page));
-        console.log(`📄 Theme "${theme}" requires pages: ${pages.join(", ")}`);
+      const variables = THEME_TO_VARIABLES[theme];
+      if (variables) {
+        variables.forEach((variable) => allVariables.add(variable));
+        console.log(
+          `📄 Theme "${theme}" requires variables: ${variables.join(", ")}`
+        );
       } else {
-        console.log(`⚠️ No pages found for theme: ${theme}`);
+        console.log(`⚠️ No variables found for theme: ${theme}`);
       }
     });
 
-    const pagesToExtract = Array.from(allPages).sort((a, b) => a - b);
-    console.log(`📄 Total pages to extract: ${pagesToExtract.join(", ")}`);
-
-    if (pagesToExtract.length === 0) {
-      throw new Error("No pages found for selected themes");
-    }
-
-    // Path to the PDF file
-    const pdfPath = path.join(
-      process.cwd(),
-      "app",
-      "api",
-      "tage-mage",
-      "manuel.pdf"
-    );
-    console.log(`📄 PDF path: ${pdfPath}`);
-
-    // Dynamic import to handle Vercel serverless environment
-    console.log("📄 Converting PDF to images...");
-    const { pdf } = await import("pdf-to-img");
-    const document = await pdf(pdfPath, { scale: 2 });
-    console.log(`📄 PDF loaded with ${document.length} total pages`);
-
-    // Extract the specific pages as images
-    const pageImages: { page: number; base64: string }[] = [];
-
-    for (const pageNum of pagesToExtract) {
-      if (pageNum <= document.length) {
-        console.log(`📄 Extracting page ${pageNum}...`);
-        const pageBuffer = await document.getPage(pageNum);
-        const pageBase64 = pageBuffer.toString("base64");
-        pageImages.push({ page: pageNum, base64: pageBase64 });
-        console.log(
-          `✅ Page ${pageNum} extracted (${pageBase64.length} chars)`
-        );
-      } else {
-        console.log(
-          `⚠️ Page ${pageNum} exceeds PDF length (${document.length})`
-        );
-      }
-    }
-
-    if (pageImages.length === 0) {
-      throw new Error("No valid pages could be extracted");
-    }
-
-    // Send images to OpenAI Vision for text extraction
-    console.log(`🔍 Sending ${pageImages.length} images to OpenAI Vision...`);
-
-    const visionContent = [
-      {
-        type: "text" as const,
-        text: `Please extract all the text from these PDF pages about TAGE MAGE calcul exercises. 
-        
-        For each page, provide:
-        1. The page number
-        2. All text content with proper structure
-        3. Any mathematical formulas or equations
-        4. Exercise examples if present
-        
-        Structure the output clearly so an AI can understand the content for generating similar exercises.
-        
-        Pages being analyzed: ${pagesToExtract.join(", ")}`,
-      },
-      ...pageImages.map(({ page, base64 }) => ({
-        type: "image_url" as const,
-        image_url: {
-          url: `data:image/png;base64,${base64}`,
-          detail: "high" as const,
-        },
-      })),
-    ];
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4.1",
-      messages: [
-        {
-          role: "user",
-          content: visionContent,
-        },
-      ],
-      max_tokens: 4000,
-    });
-
-    const extractedText =
-      response.choices[0].message.content || "No text extracted";
-    console.log(`✅ Text extraction completed (${extractedText.length} chars)`);
+    const variablesToExtract = Array.from(allVariables);
     console.log(
-      "📄 First 500 chars of extracted text:",
-      extractedText.substring(0, 500)
+      `📄 Total variables to extract: ${variablesToExtract.join(", ")}`
     );
 
-    return extractedText;
+    if (variablesToExtract.length === 0) {
+      throw new Error("No variables found for selected themes");
+    }
+
+    // Extract content from each variable
+    let extractedContent = "";
+    variablesToExtract.forEach((variableName) => {
+      const content =
+        tageAmageCalcul[variableName as keyof typeof tageAmageCalcul];
+      if (content) {
+        extractedContent += `\n=== ${variableName.toUpperCase()} ===\n${content}\n`;
+        console.log(
+          `✅ Variable ${variableName} extracted (${content.length} chars)`
+        );
+      } else {
+        console.log(`⚠️ Variable ${variableName} not found in tageAmageCalcul`);
+      }
+    });
+
+    console.log(
+      `✅ Chapter content extraction completed (${extractedContent.length} chars)`
+    );
+    console.log(
+      "📄 First 500 chars of extracted content:",
+      extractedContent.substring(0, 500)
+    );
+
+    return extractedContent;
   } catch (error) {
-    console.error("❌ Error in PDF extraction:", error);
+    console.error("❌ Error in chapter content extraction:", error);
     throw error;
   }
 }
@@ -579,7 +536,9 @@ async function generateInedits(
   );
 
   // Extract PDF content for selected themes only
-  const pdfContent = await extractPDFPagesForThemes(selectedThemesForInedits);
+  const pdfContent = await extractChapterContentForThemes(
+    selectedThemesForInedits
+  );
 
   // Prepare the options text based on optionsCount
   const optionsText =
