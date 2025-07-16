@@ -642,7 +642,7 @@ IMPORTANT:
 - Ne modifie pas le contenu des exercices, fais juste la fusion et la structuration
 - Retourne uniquement le JSON, sans texte supplémentaire`;
 
-  console.log("🔗 Calling OpenAI for merge...");
+  console.log("🔗 Calling OpenAI for merge..");
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
