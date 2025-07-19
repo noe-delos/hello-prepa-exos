@@ -645,7 +645,7 @@ IMPORTANT:
   console.log("🔗 Calling OpenAI for merge..");
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
+    model: "gpt-4.1",
     messages: [
       {
         role: "system",
