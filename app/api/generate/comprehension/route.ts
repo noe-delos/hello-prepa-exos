@@ -283,7 +283,7 @@ IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou aprè
   const msg: any = await anthropic.messages.create({
     model: "claude-3-7-sonnet-20250219",
     max_tokens: 20000,
-    temperature: 0.3,
+    temperature: 1,
     system:
       "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
     messages: [{ role: "user", content: validationPrompt }],
