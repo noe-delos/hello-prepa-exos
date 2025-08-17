@@ -42,6 +42,7 @@ const DocxRequestSchema = z.object({
   randomExercises: z.array(z.any()).optional(),
   optionsCount: z.number().int().min(2).max(5).default(5), // Always 5 for CondMin but added for consistency
   selectedThemes: z.array(z.string()).optional(), // Added for consistency
+  questionCount: z.number().int().min(1).optional(), // Added questionCount for truncation
 });
 
 // Images en base64 pour le logo et le filigrane - Utiliser des images minimalistes valides
@@ -116,6 +117,7 @@ export async function POST(request: NextRequest) {
       correctionType = "sansCorrection",
       optionsCount = 5, // Added for consistency, though not used for CondMin
       selectedThemes = [], // Added for consistency
+      questionCount, // Extract questionCount for truncation
     } = validationResult.data;
 
     console.log(
@@ -129,6 +131,22 @@ export async function POST(request: NextRequest) {
       )}`
     );
 
+    // Extract questionCount from title if not provided directly
+    let targetQuestionCount = questionCount;
+    if (!targetQuestionCount) {
+      const titleMatch = title.match(/(\d+)_questions/);
+      if (titleMatch) {
+        targetQuestionCount = parseInt(titleMatch[1], 10);
+        console.log(`DOCX CondMin API: Extracted questionCount ${targetQuestionCount} from title`);
+      }
+    }
+    
+    // Truncate exercises if we have more than requested
+    if (targetQuestionCount && content.exercises.length > targetQuestionCount) {
+      console.log(`DOCX CondMin API: Truncating exercises from ${content.exercises.length} to ${targetQuestionCount}`);
+      content.exercises = content.exercises.slice(0, targetQuestionCount);
+    }
+    
     // Vérifier et nettoyer les données
     console.log("DOCX CondMin API: Cleaning and validating data");
     // S'assurer que tous les champs nécessaires sont présents et valides

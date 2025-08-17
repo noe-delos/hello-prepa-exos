@@ -62,6 +62,7 @@ const DocxRequestSchema = z.object({
   textsWithQuestions: z.array(z.any()).optional(),
   optionsCount: z.number().int().min(2).max(5).default(5), // Added optionsCount field
   selectedThemes: z.array(z.string()).optional(), // Added selectedThemes field
+  questionCount: z.number().int().min(1).optional(), // Added questionCount for truncation
 });
 
 // Images en base64 pour le logo et le filigrane - Utiliser des images minimalistes valides
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
       correctionType = "sansCorrection",
       optionsCount = 5, // Extract optionsCount with default value
       selectedThemes = [], // Extract selectedThemes with default value
+      questionCount, // Extract questionCount for truncation
     } = validationResult.data;
 
     console.log(
@@ -125,6 +127,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Extract questionCount from title if not provided directly
+    let targetQuestionCount = questionCount;
+    if (!targetQuestionCount) {
+      const titleMatch = title.match(/(\d+)_questions/);
+      if (titleMatch) {
+        targetQuestionCount = parseInt(titleMatch[1], 10);
+        console.log(`DOCX Comprehension API: Extracted questionCount ${targetQuestionCount} from title`);
+      }
+    }
+    
+    // Calculate current total questions across all texts
+    const currentTotalQuestions = content.texts.reduce(
+      (total: number, text: any) => total + (text.questions?.length || 0),
+      0
+    );
+    
+    // Truncate questions if we have more than requested
+    if (targetQuestionCount && currentTotalQuestions > targetQuestionCount) {
+      console.log(`DOCX Comprehension API: Truncating questions from ${currentTotalQuestions} to ${targetQuestionCount}`);
+      
+      let remainingQuestions = targetQuestionCount;
+      content.texts = content.texts.map((text: any) => {
+        if (remainingQuestions <= 0) {
+          text.questions = [];
+        } else if (text.questions && text.questions.length > remainingQuestions) {
+          text.questions = text.questions.slice(0, remainingQuestions);
+          remainingQuestions = 0;
+        } else {
+          remainingQuestions -= text.questions?.length || 0;
+        }
+        return text;
+      }).filter((text: any) => text.questions && text.questions.length > 0);
+    }
+    
     // Vérifier et nettoyer les données
     console.log("DOCX Comprehension API: Cleaning and validating data");
 

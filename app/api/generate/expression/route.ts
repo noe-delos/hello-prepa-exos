@@ -219,7 +219,7 @@ async function callClaudeWithStreaming(
   try {
     const stream = await anthropic.messages.create({
       model: "claude-3-7-sonnet-20250219",
-      max_tokens: 20000,
+      max_tokens: 64000,
       temperature: 1,
       system:
         systemPrompt +
@@ -309,7 +309,7 @@ IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou aprè
 
   const msg: any = await anthropic.messages.create({
     model: "claude-3-7-sonnet-20250219",
-    max_tokens: 20000,
+    max_tokens: 64000,
     temperature: 1,
     system:
       "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
@@ -322,6 +322,78 @@ IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou aprè
 
   console.log("API Expression: Claude JSON validation response received");
   return msg.content[1].text || "{}";
+}
+
+// Helper function to complete missing exercises
+async function completeExercises(
+  generatedContent: any,
+  questionCount: number,
+  optionsCount: number,
+  correctionType: string,
+  niveau: string
+): Promise<any> {
+  const currentCount = generatedContent.exercises?.length || 0;
+  
+  if (currentCount >= questionCount) {
+    console.log(`API Expression: Already have ${currentCount} exercises, no completion needed`);
+    return generatedContent;
+  }
+  
+  const missingCount = questionCount - currentCount;
+  console.log(`API Expression: Need to generate ${missingCount} additional exercises`);
+  
+  const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+    String.fromCharCode(65 + i)
+  );
+  
+  const completionPrompt = `Le JSON suivant contient ${currentCount} exercices mais il en faut ${questionCount} au total.
+
+${JSON.stringify(generatedContent, null, 2)}
+
+Génère ${missingCount} exercices supplémentaires d'expression de niveau ${niveau} pour compléter la liste.
+
+Pour chaque exercice supplémentaire, inclure :
+1. Une question claire avec les mots à remplacer entre [crochets] si nécessaire
+2. Le nombre de remplacements (replacementCount): entre 0 et 3
+3. La liste des mots à remplacer (replacements)
+4. Exactement ${optionsCount} options (${optionLetters.join(", ")})
+5. La réponse correcte
+${correctionType !== "sansCorrection" ? (correctionType === "correctionCourte" ? "6. Une courte explication (shortExplanation)" : "6. Une explication détaillée (explanation)") : ""}
+
+RETOURNE UNIQUEMENT les exercices manquants dans ce format JSON:
+{
+  "exercises": [
+    // Les ${missingCount} exercices supplémentaires ici
+  ]
+}`;
+  
+  try {
+    const msg: any = await anthropic.messages.create({
+      model: "claude-3-7-sonnet-20250219",
+      max_tokens: 30000,
+      temperature: 1,
+      system: "Tu es un expert en génération d'exercices d'expression TAGE MAGE. Retourne uniquement du JSON valide.",
+      messages: [{ role: "user", content: completionPrompt }],
+      thinking: {
+        type: "enabled",
+        budget_tokens: 8000,
+      },
+    });
+    
+    const additionalExercises = JSON.parse(msg.content[1].text || "{}");
+    
+    if (additionalExercises.exercises && Array.isArray(additionalExercises.exercises)) {
+      generatedContent.exercises = [
+        ...(generatedContent.exercises || []),
+        ...additionalExercises.exercises
+      ];
+      console.log(`API Expression: Successfully added ${additionalExercises.exercises.length} exercises`);
+    }
+  } catch (error) {
+    console.error("API Expression: Failed to complete exercises:", error);
+  }
+  
+  return generatedContent;
 }
 
 export async function POST(request: NextRequest) {
@@ -675,6 +747,18 @@ ${
       optionLetters,
       niveau
     );
+    
+    // Check if we need to complete missing exercises
+    if (generatedContent.exercises && generatedContent.exercises.length < questionCount) {
+      console.log(`API Expression: Only ${generatedContent.exercises.length} exercises generated, need ${questionCount}`);
+      generatedContent = await completeExercises(
+        generatedContent,
+        questionCount,
+        optionsCount,
+        correctionType,
+        niveau
+      );
+    }
 
     // Validate the generated content against our schema
     const contentValidation =
@@ -725,6 +809,7 @@ ${
       correctionType,
       randomExercises,
       optionsCount,
+      questionCount, // Pass the question count for truncation safety
     };
     console.log("API Expression: DOCX request payload prepared");
 

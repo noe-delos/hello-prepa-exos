@@ -187,7 +187,7 @@ async function callClaudeWithStreaming(
   try {
     const stream = await anthropic.messages.create({
       model: "claude-3-7-sonnet-20250219",
-      max_tokens: 20000,
+      max_tokens: 64000,
       temperature: 1,
       system:
         systemPrompt +
@@ -282,7 +282,7 @@ IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou aprè
 
   const msg: any = await anthropic.messages.create({
     model: "claude-3-7-sonnet-20250219",
-    max_tokens: 20000,
+    max_tokens: 64000,
     temperature: 1,
     system:
       "Tu es un expert en correction de JSON. Retourne uniquement du JSON valide sans aucun texte supplémentaire.",
@@ -295,6 +295,152 @@ IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou aprè
 
   console.log("API Comprehension: Claude JSON validation response received");
   return msg.content[1].text || "{}";
+}
+
+// Helper function to complete missing texts/questions
+async function completeTexts(
+  generatedContent: any,
+  numTexts: number,
+  questionsPerText: number,
+  optionsCount: number,
+  correctionType: string,
+  niveau: string
+): Promise<any> {
+  const currentTextsCount = generatedContent.texts?.length || 0;
+  
+  // Check if we have enough texts
+  if (currentTextsCount >= numTexts) {
+    // Check if each text has enough questions
+    let needsCompletion = false;
+    for (const text of generatedContent.texts) {
+      if (!text.questions || text.questions.length < questionsPerText) {
+        needsCompletion = true;
+        break;
+      }
+    }
+    
+    if (!needsCompletion) {
+      console.log(`API Comprehension: All ${currentTextsCount} texts have sufficient questions`);
+      return generatedContent;
+    }
+  }
+  
+  const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+    String.fromCharCode(65 + i)
+  );
+  
+  // Complete missing texts
+  if (currentTextsCount < numTexts) {
+    const missingTextsCount = numTexts - currentTextsCount;
+    console.log(`API Comprehension: Need to generate ${missingTextsCount} additional texts`);
+    
+    const completionPrompt = `Le JSON suivant contient ${currentTextsCount} textes mais il en faut ${numTexts} au total.
+
+${JSON.stringify(generatedContent, null, 2)}
+
+Génère ${missingTextsCount} textes supplémentaires de compréhension de niveau ${niveau} avec ${questionsPerText} questions chacun.
+
+Pour chaque texte, inclure :
+1. Un texte de 350-450 mots sur un sujet de culture générale
+2. Exactement ${questionsPerText} questions avec ${optionsCount} options (${optionLetters.join(", ")})
+3. La réponse correcte pour chaque question
+${correctionType !== "sansCorrection" ? (correctionType === "correctionCourte" ? "4. Une courte explication (shortExplanation)" : "4. Une explication détaillée (explanation)") : ""}
+
+RETOURNE UNIQUEMENT les textes manquants dans ce format JSON:
+{
+  "texts": [
+    // Les ${missingTextsCount} textes supplémentaires avec leurs questions
+  ]
+}`;
+    
+    try {
+      const msg: any = await anthropic.messages.create({
+        model: "claude-3-7-sonnet-20250219",
+        max_tokens: 40000,
+        temperature: 1,
+        system: "Tu es un expert en génération de textes de compréhension TAGE MAGE. Retourne uniquement du JSON valide.",
+        messages: [{ role: "user", content: completionPrompt }],
+        thinking: {
+          type: "enabled",
+          budget_tokens: 10000,
+        },
+      });
+      
+      const additionalTexts = JSON.parse(msg.content[1].text || "{}");
+      
+      if (additionalTexts.texts && Array.isArray(additionalTexts.texts)) {
+        generatedContent.texts = [
+          ...(generatedContent.texts || []),
+          ...additionalTexts.texts
+        ];
+        console.log(`API Comprehension: Successfully added ${additionalTexts.texts.length} texts`);
+      }
+    } catch (error) {
+      console.error("API Comprehension: Failed to complete texts:", error);
+    }
+  }
+  
+  // Complete missing questions in existing texts
+  for (let i = 0; i < generatedContent.texts.length; i++) {
+    const text = generatedContent.texts[i];
+    const currentQuestionsCount = text.questions?.length || 0;
+    
+    if (currentQuestionsCount < questionsPerText) {
+      const missingQuestionsCount = questionsPerText - currentQuestionsCount;
+      console.log(`API Comprehension: Text ${i+1} needs ${missingQuestionsCount} more questions`);
+      
+      const questionCompletionPrompt = `Le texte suivant a ${currentQuestionsCount} questions mais il en faut ${questionsPerText}:
+
+TEXTE:
+${text.content}
+
+QUESTIONS EXISTANTES:
+${JSON.stringify(text.questions, null, 2)}
+
+Génère ${missingQuestionsCount} questions supplémentaires pour ce texte.
+
+Chaque question doit avoir:
+1. Un énoncé clair
+2. ${optionsCount} options (${optionLetters.join(", ")})
+3. La réponse correcte
+${correctionType !== "sansCorrection" ? (correctionType === "correctionCourte" ? "4. Une courte explication (shortExplanation)" : "4. Une explication détaillée (explanation)") : ""}
+
+RETOURNE UNIQUEMENT les questions manquantes dans ce format JSON:
+{
+  "questions": [
+    // Les ${missingQuestionsCount} questions supplémentaires
+  ]
+}`;
+      
+      try {
+        const msg: any = await anthropic.messages.create({
+          model: "claude-3-7-sonnet-20250219",
+          max_tokens: 20000,
+          temperature: 1,
+          system: "Tu es un expert en génération de questions de compréhension. Retourne uniquement du JSON valide.",
+          messages: [{ role: "user", content: questionCompletionPrompt }],
+          thinking: {
+            type: "enabled",
+            budget_tokens: 5000,
+          },
+        });
+        
+        const additionalQuestions = JSON.parse(msg.content[1].text || "{}");
+        
+        if (additionalQuestions.questions && Array.isArray(additionalQuestions.questions)) {
+          text.questions = [
+            ...(text.questions || []),
+            ...additionalQuestions.questions
+          ];
+          console.log(`API Comprehension: Added ${additionalQuestions.questions.length} questions to text ${i+1}`);
+        }
+      } catch (error) {
+        console.error(`API Comprehension: Failed to complete questions for text ${i+1}:`, error);
+      }
+    }
+  }
+  
+  return generatedContent;
 }
 
 export async function POST(request: NextRequest) {
@@ -642,6 +788,25 @@ ${
       optionLetters,
       niveau
     );
+    
+    // Check if we need to complete missing texts or questions
+    const totalQuestionsNeeded = numTexts * questionsPerText;
+    const currentTotalQuestions = generatedContent.texts?.reduce(
+      (total: number, text: any) => total + (text.questions?.length || 0),
+      0
+    ) || 0;
+    
+    if (currentTotalQuestions < totalQuestionsNeeded) {
+      console.log(`API Comprehension: Only ${currentTotalQuestions} questions generated, need ${totalQuestionsNeeded}`);
+      generatedContent = await completeTexts(
+        generatedContent,
+        numTexts,
+        questionsPerText,
+        optionsCount,
+        correctionType,
+        niveau
+      );
+    }
 
     // Validate the generated content against our schema
     const contentValidation =
@@ -692,6 +857,7 @@ ${
       correctionType,
       textsWithQuestions, // Pass example texts for reference
       optionsCount, // Pass the options count to the DOCX generator
+      questionCount: totalQuestions, // Pass the total question count for truncation safety
     };
     console.log("API Comprehension: DOCX request payload prepared");
 

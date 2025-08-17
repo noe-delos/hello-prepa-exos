@@ -818,6 +818,7 @@ export async function POST(request: NextRequest) {
       randomExercises: [], // Empty since we're using new generation method
       optionsCount,
       selectedThemes,
+      questionCount, // Pass the question count for truncation safety
     };
 
     const response = await fetch(docxEndpoint, {

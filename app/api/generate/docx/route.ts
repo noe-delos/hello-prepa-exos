@@ -53,6 +53,7 @@ const DocxRequestSchema = z.object({
   randomExercises: z.array(z.any()).optional(),
   optionsCount: z.number().int().min(2).max(5).default(5), // Added optionsCount field
   selectedThemes: z.array(z.string()).optional(), // Added selectedThemes field
+  questionCount: z.number().int().min(1).optional(), // Added questionCount for truncation
 });
 
 // Images en base64 pour le logo et le filigrane - Utiliser des images minimalistes valides
@@ -104,12 +105,29 @@ export async function POST(request: NextRequest) {
       title,
       correctionType = "sansCorrection",
       optionsCount = 5, // Extract optionsCount with default value
+      questionCount, // Extract questionCount for truncation
     } = validationResult.data;
 
     console.log(
       `DOCX API: Processing document for user ${userId} with title ${title}, correction type ${correctionType}, and ${optionsCount} options`
     );
 
+    // Extract questionCount from title if not provided directly
+    let targetQuestionCount = questionCount;
+    if (!targetQuestionCount) {
+      const titleMatch = title.match(/(\d+)_questions/);
+      if (titleMatch) {
+        targetQuestionCount = parseInt(titleMatch[1], 10);
+        console.log(`DOCX API: Extracted questionCount ${targetQuestionCount} from title`);
+      }
+    }
+    
+    // Truncate exercises if we have more than requested
+    if (targetQuestionCount && content.exercises.length > targetQuestionCount) {
+      console.log(`DOCX API: Truncating exercises from ${content.exercises.length} to ${targetQuestionCount}`);
+      content.exercises = content.exercises.slice(0, targetQuestionCount);
+    }
+    
     // Vérifier et nettoyer les données
     console.log("DOCX API: Cleaning and validating data");
     // S'assurer que tous les champs nécessaires sont présents et valides

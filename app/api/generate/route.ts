@@ -167,7 +167,8 @@ function validateAndFixContent(
 // Helper function to call Claude with streaming
 async function callClaudeWithStreaming(
   prompt: string,
-  systemPrompt: string
+  systemPrompt: string,
+  questionCount: number
 ): Promise<string> {
   console.log("API: Starting Claude streaming call");
 
@@ -182,11 +183,11 @@ async function callClaudeWithStreaming(
       temperature: 1,
       system:
         systemPrompt +
-        "\n\nIMPORTANT: Ta réponse doit être un objet JSON valide et complet, sans texte supplémentaire avant ou après le JSON.",
+        `\n\nIMPORTANT CRITIQUE: Tu dois générer EXACTEMENT ${questionCount} exercices. Ta réponse doit être un objet JSON valide et complet contenant tous les ${questionCount} exercices, sans texte supplémentaire avant ou après le JSON.`,
       messages: [{ role: "user", content: prompt }],
       thinking: {
         type: "enabled",
-        budget_tokens: 16000,
+        budget_tokens: 8000,
       },
       stream: true,
     });
@@ -215,6 +216,10 @@ async function callClaudeWithStreaming(
     console.log("API: Streaming completed");
     console.log(`API: Thinking content length: ${thinkingContent.length}`);
     console.log(`API: Main content length: ${mainContent.length}`);
+    
+    // Log first 500 chars and last 500 chars of the response for debugging
+    console.log("API: First 500 chars of response:", mainContent.substring(0, 500));
+    console.log("API: Last 500 chars of response:", mainContent.substring(Math.max(0, mainContent.length - 500)));
 
     return mainContent;
   } catch (error) {
@@ -270,12 +275,99 @@ IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou aprè
     messages: [{ role: "user", content: validationPrompt }],
     thinking: {
       type: "enabled",
-      budget_tokens: 10000,
+      budget_tokens: 6000,
     },
   });
 
   console.log("API: Claude JSON validation response received");
   return msg.content[1].text || "{}";
+}
+
+// Helper function to complete missing exercises
+async function completeExercises(
+  generatedContent: any,
+  questionCount: number,
+  optionsCount: number,
+  correctionType: string,
+  niveau: string,
+  sousTest: string
+): Promise<any> {
+  const currentCount = generatedContent.exercises?.length || 0;
+  
+  if (currentCount >= questionCount) {
+    console.log(`API: Already have ${currentCount} exercises, no completion needed`);
+    return generatedContent;
+  }
+  
+  const missingCount = questionCount - currentCount;
+  console.log(`API: Need to generate ${missingCount} additional exercises (have ${currentCount}, need ${questionCount})`);
+  
+  const optionLetters = Array.from({ length: optionsCount }, (_, i) =>
+    String.fromCharCode(65 + i)
+  );
+  
+  const completionPrompt = `Le JSON suivant contient ${currentCount} exercices mais il en faut ${questionCount} au total.
+
+${JSON.stringify(generatedContent, null, 2)}
+
+Génère ${missingCount} exercices supplémentaires de ${sousTest} de niveau ${niveau} pour compléter la liste.
+
+Pour chaque exercice supplémentaire, inclure :
+1. Une question claire et directe
+2. Exactement ${optionsCount} options (${optionLetters.join(", ")})
+3. La réponse correcte
+${correctionType !== "sansCorrection" ? (correctionType === "correctionCourte" ? "4. Une courte explication (shortExplanation)" : "4. Une explication détaillée (explanation)") : ""}
+
+RETOURNE UNIQUEMENT les exercices manquants dans ce format JSON:
+{
+  "exercises": [
+    // Les ${missingCount} exercices supplémentaires ici
+  ]
+}`;
+  
+  try {
+    console.log(`API: Calling Claude to complete missing ${missingCount} exercises`);
+    const msg: any = await anthropic.messages.create({
+      model: "claude-3-7-sonnet-20250219",
+      max_tokens: 40000,
+      temperature: 1,
+      system: `Tu es un expert en génération d'exercices de ${sousTest} TAGE MAGE. Retourne uniquement du JSON valide.`,
+      messages: [{ role: "user", content: completionPrompt }],
+      thinking: {
+        type: "enabled",
+        budget_tokens: 6000,
+      },
+    });
+    
+    console.log("API: Claude completion response received");
+    const responseText = msg.content[1].text || "{}";
+    
+    // Extract JSON from response
+    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    let cleanedJSON = responseText;
+    if (jsonMatch && jsonMatch[1]) {
+      cleanedJSON = jsonMatch[1].trim();
+    } else {
+      const jsonObjectMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonObjectMatch) {
+        cleanedJSON = jsonObjectMatch[0];
+      }
+    }
+    
+    const additionalExercises = JSON.parse(cleanedJSON);
+    
+    if (additionalExercises.exercises && Array.isArray(additionalExercises.exercises)) {
+      generatedContent.exercises = [
+        ...(generatedContent.exercises || []),
+        ...additionalExercises.exercises
+      ];
+      console.log(`API: Successfully added ${additionalExercises.exercises.length} exercises, total now: ${generatedContent.exercises.length}`);
+    }
+  } catch (error) {
+    console.error("API: Failed to complete exercises:", error);
+  }
+  
+  return generatedContent;
 }
 
 export async function POST(request: NextRequest) {
@@ -426,7 +518,9 @@ export async function POST(request: NextRequest) {
         : "";
 
     // Call LLM to generate exercises
-    const prompt = `Générer ${questionCount} exercices ${
+    const prompt = `IMPORTANT: Tu dois générer EXACTEMENT ${questionCount} exercices complets de ${sousTest}.
+
+Générer ${questionCount} exercices ${
       niveau === "mixte"
         ? "de niveau varié " + mixteDistributionText
         : `de niveau ${niveau}`
@@ -434,10 +528,14 @@ export async function POST(request: NextRequest) {
 pour le sous-test "${sousTest}" ${distributionText}. 
 Fournir ces exercices ${correctionDescription}.
 
+IMPORTANT: Assure-toi de générer TOUS les ${questionCount} exercices demandés dans le JSON. Ne t'arrête pas avant d'avoir créé tous les exercices.
+
 Voici ${
       exercisesExamples.length
-    } exemples d'exercices du type ${sousTest} pour t'inspirer:
+    } exemples d'exercices du type ${sousTest} pour t'inspirer (utilise-les comme référence pour le style et la structure):
 ${JSON.stringify(exercisesExamples, null, 2)}
+
+IMPORTANT: Ces exemples montrent le format attendu. Tu dois créer ${questionCount} exercices originaux en suivant ce format.
 
 Pour chaque exercice, inclure :
 1. Une question claire sous forme de texte. 
@@ -477,10 +575,12 @@ ${
           : ""
       }
     }
-    // Plus d'exercices...
+    // Plus d'exercices... (CONTINUE JUSQU'À AVOIR EXACTEMENT ${questionCount} EXERCICES)
   ],
   "conclusion": "Texte de conclusion bref"
 }
+
+REMINDER FINAL: Le JSON doit contenir exactement ${questionCount} exercices complets. Vérifie que tu as bien généré ${questionCount} objets dans le tableau "exercises".
 
 ${
   llmModel === "claude"
@@ -512,7 +612,7 @@ ${
     } else {
       // Use Claude with streaming
       try {
-        rawResponse = await callClaudeWithStreaming(prompt, systemPrompt);
+        rawResponse = await callClaudeWithStreaming(prompt, systemPrompt, questionCount);
         console.log("API: Claude streaming completed");
         console.log(`API: Raw response length: ${rawResponse.length}`);
 
@@ -582,6 +682,27 @@ ${
       sousTest,
       niveau
     );
+    
+    // Check if we need to complete missing exercises
+    if (generatedContent.exercises && generatedContent.exercises.length < questionCount) {
+      console.log(`API: Only ${generatedContent.exercises.length} exercises generated, need ${questionCount}`);
+      generatedContent = await completeExercises(
+        generatedContent,
+        questionCount,
+        optionsCount,
+        correctionType,
+        niveau,
+        sousTest
+      );
+      
+      // Validate again after completion
+      generatedContent = validateAndFixContent(
+        generatedContent,
+        optionLetters,
+        sousTest,
+        niveau
+      );
+    }
 
     // Validate the generated content against our schema
     const contentValidation =
@@ -629,6 +750,7 @@ ${
       correctionType, // Pass the correction type to the DOCX generator
       randomExercises,
       optionsCount, // Pass the options count to the DOCX generator
+      questionCount, // Pass the question count for truncation safety
     };
     console.log("API: DOCX request payload prepared");
 
