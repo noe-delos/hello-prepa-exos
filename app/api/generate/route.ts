@@ -178,7 +178,7 @@ async function callClaudeWithStreaming(
 
   try {
     const stream = await anthropic.messages.create({
-      model: "claude-3-7-sonnet-20250219",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 20000,
       temperature: 1,
       system:
@@ -267,7 +267,7 @@ Corrige ce JSON pour qu'il soit valide et respecte exactement cette structure:
 IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou après.`;
 
   const msg: any = await anthropic.messages.create({
-    model: "claude-3-7-sonnet-20250219",
+    model: "claude-sonnet-4-5-20250929",
     max_tokens: 20000,
     temperature: 1,
     system:
@@ -328,7 +328,7 @@ RETOURNE UNIQUEMENT les exercices manquants dans ce format JSON:
   try {
     console.log(`API: Calling Claude to complete missing ${missingCount} exercises`);
     const msg: any = await anthropic.messages.create({
-      model: "claude-3-7-sonnet-20250219",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 40000,
       temperature: 1,
       system: `Tu es un expert en génération d'exercices de ${sousTest} TAGE MAGE. Retourne uniquement du JSON valide.`,
@@ -422,13 +422,18 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient();
     console.log("API: Supabase admin client created successfully");
 
-    // Récupération de 20 exercices aléatoires depuis la base de données
+    // Récupération d'exercices aléatoires depuis la base de données
     console.log("API: Fetching random exercises from database");
-    const { data: randomExercises, error: fetchError } = await supabase
+    // Fetch a larger pool and shuffle client-side for true randomness
+    const { data: allExercises, error: fetchError } = await supabase
       .from(`questions_${sousTest}`)
       .select("*")
-      .limit(20)
-      .order("Question", { ascending: false });
+      .limit(100);
+
+    // Shuffle and take 20 random exercises
+    const randomExercises = allExercises
+      ? [...allExercises].sort(() => Math.random() - 0.5).slice(0, 20)
+      : [];
 
     if (fetchError) {
       console.error("API: Error fetching exercises:", fetchError);

@@ -194,7 +194,7 @@ async function callClaudeWithStreaming(
 
   try {
     const stream = await anthropic.messages.create({
-      model: "claude-3-7-sonnet-20250219",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 64000,
       temperature: 1,
       system:
@@ -324,16 +324,18 @@ async function generateVariations(
   let query = supabase
     .from("questions_condMinimales")
     .select("*")
-    .limit(variationCount);
+    .limit(100); // Fetch larger pool for randomness
 
   if (selectedThemes.length > 0) {
     query = query.in("Thème", selectedThemes);
   }
 
-  const { data: randomExercises, error: fetchError } = await query.order(
-    "Question",
-    { ascending: false }
-  );
+  const { data: allExercises, error: fetchError } = await query;
+
+  // Shuffle and take required number of random exercises
+  const randomExercises = allExercises
+    ? [...allExercises].sort(() => Math.random() - 0.5).slice(0, variationCount)
+    : [];
 
   if (fetchError) {
     console.error("❌ Error fetching exercises:", fetchError);

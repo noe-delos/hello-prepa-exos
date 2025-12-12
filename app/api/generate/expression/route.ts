@@ -218,7 +218,7 @@ async function callClaudeWithStreaming(
 
   try {
     const stream = await anthropic.messages.create({
-      model: "claude-3-7-sonnet-20250219",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 64000,
       temperature: 1,
       system:
@@ -308,7 +308,7 @@ Corrige ce JSON pour qu'il soit valide et respecte exactement cette structure:
 IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou après.`;
 
   const msg: any = await anthropic.messages.create({
-    model: "claude-3-7-sonnet-20250219",
+    model: "claude-sonnet-4-5-20250929",
     max_tokens: 64000,
     temperature: 1,
     system:
@@ -369,7 +369,7 @@ RETOURNE UNIQUEMENT les exercices manquants dans ce format JSON:
   
   try {
     const msg: any = await anthropic.messages.create({
-      model: "claude-3-7-sonnet-20250219",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 30000,
       temperature: 1,
       system: "Tu es un expert en génération d'exercices d'expression TAGE MAGE. Retourne uniquement du JSON valide.",
@@ -456,12 +456,16 @@ export async function POST(request: NextRequest) {
     // Retrieve random exercises from the database
     console.log("API Expression: Fetching random exercises from database");
 
-    // Execute the query to get examples
-    const { data: randomExercises, error: fetchError } = await supabase
+    // Fetch larger pool and shuffle for true randomness
+    const { data: allExercises, error: fetchError } = await supabase
       .from("questions_expression")
       .select("*")
-      .limit(20)
-      .order("Question", { ascending: false });
+      .limit(100);
+
+    // Shuffle and take 20 random exercises
+    const randomExercises = allExercises
+      ? [...allExercises].sort(() => Math.random() - 0.5).slice(0, 20)
+      : [];
 
     if (fetchError) {
       console.error("API Expression: Error fetching exercises:", fetchError);

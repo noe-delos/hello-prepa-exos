@@ -186,7 +186,7 @@ async function callClaudeWithStreaming(
 
   try {
     const stream = await anthropic.messages.create({
-      model: "claude-3-7-sonnet-20250219",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 64000,
       temperature: 1,
       system:
@@ -281,7 +281,7 @@ Corrige ce JSON pour qu'il soit valide et respecte exactement cette structure:
 IMPORTANT: Retourne UNIQUEMENT le JSON corrigé, sans aucun texte avant ou après.`;
 
   const msg: any = await anthropic.messages.create({
-    model: "claude-3-7-sonnet-20250219",
+    model: "claude-sonnet-4-5-20250929",
     max_tokens: 64000,
     temperature: 1,
     system:
@@ -355,7 +355,7 @@ RETOURNE UNIQUEMENT les textes manquants dans ce format JSON:
     
     try {
       const msg: any = await anthropic.messages.create({
-        model: "claude-3-7-sonnet-20250219",
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 40000,
         temperature: 1,
         system: "Tu es un expert en génération de textes de compréhension TAGE MAGE. Retourne uniquement du JSON valide.",
@@ -414,7 +414,7 @@ RETOURNE UNIQUEMENT les questions manquantes dans ce format JSON:
       
       try {
         const msg: any = await anthropic.messages.create({
-          model: "claude-3-7-sonnet-20250219",
+          model: "claude-sonnet-4-5-20250929",
           max_tokens: 20000,
           temperature: 1,
           system: "Tu es un expert en génération de questions de compréhension. Retourne uniquement du JSON valide.",
@@ -508,13 +508,18 @@ export async function POST(request: NextRequest) {
       "API Comprehension: Supabase admin client created successfully"
     );
 
-    // Récupération de 2 textes aléatoires avec leurs questions
+    // Récupération de textes aléatoires avec leurs questions
     console.log("API Comprehension: Fetching random texts from database");
-    const { data: randomTexts, error: textsError } = await supabase
+    // Fetch larger pool and shuffle for true randomness
+    const { data: allTexts, error: textsError } = await supabase
       .from("content_compréhension")
       .select("*")
-      .limit(2)
-      .order("id", { ascending: false });
+      .limit(20);
+
+    // Shuffle and take 2 random texts
+    const randomTexts = allTexts
+      ? [...allTexts].sort(() => Math.random() - 0.5).slice(0, 2)
+      : [];
 
     if (textsError) {
       console.error("API Comprehension: Error fetching texts:", textsError);
